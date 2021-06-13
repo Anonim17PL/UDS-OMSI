@@ -1,16 +1,16 @@
 # UDS-delphi-OMSI
-Universal Door Script for OMSI 2
-
-API:
-  Variables:
-    door_all_closed
-    door_all_closeTarget
-    doorSpeedSoundOpen_X
-    doorSpeedSoundClose_X
-    
-   Sound Triggers:
-    ev_doorlockX_on
-    ev_doorlockX_off
- 
- Where X is the door number from 0 to 5
- There are 3 pairs of doors (0-5)
+Universal Door Script for OMSI 2<br>
+<br>
+API:<br>
+  Variables:<br>
+    door_all_closed<br>
+    door_all_closeTarget<br>
+    doorSpeedSoundOpen_X<br>
+    doorSpeedSoundClose_X<br>
+    <br>
+   Sound Triggers:<br>
+    ev_doorlockX_on<br>
+    ev_doorlockX_off<br>
+ <br>
+ Where X is the door number from 0 to 5<br>
+ There are 3 pairs of doors (0-5)<br>
