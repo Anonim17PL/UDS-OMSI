@@ -1,0 +1,2482 @@
+'##############
+'Door Script
+'##############
+
+'Controls Doors
+
+'(c) 2007-2009 Rüdiger Hülsmann
+'(c) 2007-2012 Marcel Kuhnt
+'(c) 2011 Markus Rabe
+
+'Script Version: 1.1
+'Omsi release: 1.0
+
+'Needs:
+'- elec
+'- articulation
+
+'NrSpecRandom Seed Area:
+'301 ... 318
+
+'Revision History:
+'- Marcel Kuhnt		13.06.2009	Batterietrennschalter => elec_busbar_main
+'- Marcel Kuhnt		21.06.2009	AI-Unterstützung hinzugefügt	
+'- Rüdiger Hülsmann	24.10.2009	Ansteuerung des Kinderwagenwunsches modifiziert
+'- Rüdiger Hülsmann	19.12.2009	Timer für Ausstiegstür jetzt Timegap-basiert, Bugfix: Tür schließt jetzt nur bei elec_busbar=1
+'- RÜdiger Hülsmann	22.09.2010	Door light trigger value set to 0.1
+'- RÜdiger Hülsmann	07.11.2010	Door speed based on reservoir pressure, air-operated doors made an option
+'- Marcel Kuhnt		08.11.2010	AI procedure closing doors debugged
+'- Rüdiger Hülsmann	21.11.2010	Front doors only operable when busbar on
+'- Rüdiger Hülsmann	23.12.2010	External front door operation included, option: doors only operable with actual stop brake
+'- Rüdiger Hülsmann	31.12.2010	Electric door function debugged
+'- Rüdiger Hülsmann	05.01.2011	20h-switch
+'- Rüdiger Hülsmann	07.01.2011	Backdoor manual switch sound debugged, 20h switch depending on bus type
+'- Rüdiger Hülsmann	19.01.2011	Electric door support
+'- Markus Rabe		25.02.2011	D92 Schließverhalten der Hintertür und Einstiegsbeleuchtung ans Vorbild angepasst
+'- Markus Rabe		27.02.2011	linker Flügel Vordertür: Abfangeinrichtung eingebaut
+'- Marcel Kuhnt		29.06.2011	Integration in Standard-Doorscript
+'- Marcel Kuhnt		07.07.2011	Druckluftsimulation inkl. Dämpfer
+'- Marcel Kuhnt		09.07.2011	Manuelles Öffnen/Schließen
+'- Marcel Kuhnt		10.07.2011	Manuelles Öffnen/Schließen optimiert
+'- Marcel Kuhnt		10.07.2011	Mit westdeutscher Türsteuerung versehen und für O305 erweitert
+'- Marcel Kuhnt		10.09.2011	Entriegelte Türen => Leuchtende Türlichter
+'- Marcel Kuhnt		10.09.2011	Unterschiedliche Dämpfereinstellungen je Türflügel möglich
+'- Marcel Kuhnt		09.07.2012	Anpassung an neue Busbar-Logik
+'- Marcel Kuhnt		30.10.2012	Mausbewegungsrichtung beim manuellen Bewegen angepasst
+'- Marcel Kuhnt		01.11.2012	Türentriegelung jetzt auch für E-Türen
+'- Marcel Kuhnt		01.11.2012	E-Türen generieren Leitwert
+'- Marcel Kuhnt		02.11.2012	Nach E-Türentriegelungsrücknahme verharren die Türen
+'- Marcel Kuhnt		02.11.2012	Dreitürer
+'- Marcel Kuhnt		04.11.2012	Türvariation fester Wagennummer zugeordnet
+'- Marcel Kuhnt		04.11.2012	Türanforderung mit neuen Variablen
+'- Rüdiger Hülsmann	18.11.2012	Zwangs-Haltestellenbremse durch Knickschutz
+'- Marcel Kuhnt		16.12.2012	Haltewunsch-Abschaltung durch Vordertür konstantenabhängig
+'- Marcel Kuhnt		08.01.2013	Je nach Konstante langsam aufbauender Druck erst nach Türtasterbetätigung nach Deaktivierung der Türentriegelung
+'- Marcel Kuhnt		09.01.2013	20h-Schalter funktioniert jetzt auch in Verbindung mit SD-Hstbrems-Sperr-Logik
+'- Marcel Kuhnt		09.01.2013	Türleuchten sind jetzt im Lights-Script
+'- Marcel Kuhnt		09.01.2013	Außentürtaster nur bei eingelegter Haltestellenbremse wirksam
+'- Marcel Kuhnt		09.01.2013	Reversierende Türen bei weggenommener Haltestellenbremse korrigiert
+'- Marcel Kuhnt		12.01.2013	Außenelemente korrekt angesteuert (Hst-Schalter + Hst-Bremse)
+'- Marcel Kuhnt		13.01.2013	Wagen-Hält-Zeichen erlischt bei Öffnen des rechten vorderen Türflügels mit 20h-Schalter
+'- Marcel Kuhnt		14.01.2013	Türaußentaster werden auch von Fahrgästen benutzt
+'- Rüdiger Hülsmann	28.10.2013	"needs stopbrake" function debugged
+'- Rüdiger Hülsmann	29.10.2013	Keine Freigabe der Haltestellenbremse bei aktiviertem Kneeling
+'- Anonim17PL		2020-2021	Create Enhanced script.
+
+'--------------------------------------------------------------------------------
+'Zu den Variablen doorEntriegelung_doorActive_01 und  doorEntriegelung_doorActive_23:
+
+'Bei Elektrotüren sind die 0, wenn die jeweilige Elektrotür noch entriegelt und in undefinierbarem Zustand ist,
+'1, wenn die Tür normal aktiv ist. Bei Drucklufttüren ist sie wiederum 1 im Normalzustand, von 0 bis 1 baut sich
+'ggf. der Druck nach erstmaligem Betätigen auf, bei -1 wartet sie auf erstmalige Betätigung und bei -2 ist sie
+'drucklos
+
+{trigger:bus_doorfront0}
+	
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) || (C.L.door_needs_stopbrakeswitch) && (C.L.door_needs_stopbrake) ! &&
+	(L.L.bremse_halte) (C.L.door_needs_stopbrake) && ||
+	(C.L.door_needs_stopbrake) (C.L.door_needs_stopbrakeswitch) || ! ||
+	(L.L.door_0_locked) ! (L.L.door_1_locked) ! && &&
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	{if}
+		(M.L.trg_bus_doorfront0)
+		(C.L.door_ManBackDoorFrontDoorCombined)
+		{if}
+			(M.L.trg_bus_doorfront1)
+		{endif}
+	{endif}
+	1 (S.L.cockpit_tuertaster1)
+{end}
+
+{trigger:bus_doorfront0_off}
+	0 (S.L.cockpit_tuertaster1)
+{end}
+
+{trigger:bus_doorfront0_external}
+	(L.L.elec_busbar_avail) (C.L.elec_busbar_minV) >
+	{if}
+		(M.L.trg_bus_doorfront0)
+		(C.L.door_ManBackDoorFrontDoorCombined)
+		{if}
+			(M.L.trg_bus_doorfront1)
+		{endif}
+	{endif}
+{end}
+
+{trigger:bus_doorfront1}
+	
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) || (C.L.door_needs_stopbrakeswitch) && (C.L.door_needs_stopbrake) ! &&
+	(L.L.bremse_halte) (C.L.door_needs_stopbrake) && ||
+	(C.L.door_needs_stopbrake) (C.L.door_needs_stopbrakeswitch) || ! ||
+	(L.L.door_2_locked) ! (L.L.door_3_locked) ! && &&
+	(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) && ||
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	{if}
+		(C.L.door_ManBackDoorFrontDoorCombined)
+		{if}
+			(M.L.trg_bus_dooraft23)
+		{else}
+			(M.L.trg_bus_doorfront1)
+		{endif}
+	{endif}
+	1 (S.L.cockpit_tuertaster2)
+{end}
+
+{trigger:bus_doorfront2}
+	
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) || (C.L.door_needs_stopbrakeswitch) && (C.L.door_needs_stopbrake) ! &&
+	(L.L.bremse_halte) (C.L.door_needs_stopbrake) && ||
+	(C.L.door_needs_stopbrake) (C.L.door_needs_stopbrakeswitch) || ! ||
+	(L.L.door_4_locked) ! (L.L.door_5_locked) ! && &&
+	(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) && ||
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	(C.L.cockpit_tuertaster3_enabled) (C.L.turen3_enabled) && &&
+	{if}
+		(M.L.trg_bus_dooraft45)
+	{endif}
+	1 (S.L.cockpit_tuertaster3)
+{end}
+
+{trigger:bus_doorfront1_off}
+	0 (S.L.cockpit_tuertaster2)
+{end}
+
+{trigger:bus_doorfront1_lock}
+'Doorfront1-Verriegelung: Funktioniert nur, wenn der Türflügel auch zu ist:
+	(L.L.door_1) 0.05 <
+	{if}
+		(L.L.door_1_locked) ! (S.L.door_1_locked)
+		{if}
+			(T.L.ev_doorlock1_on)
+		{else}
+			(T.L.ev_doorlock1_off)
+		{endif}
+	{endif}
+{end}
+
+{trigger:bus_dooraft}
+	(M.L.trg_bus_dooraft)
+{end}
+
+{trigger:bus_20h-switch}
+	(C.L.cockpit_has_20h_switch)
+	{if}
+		(M.L.trg_bus_20h-switch)
+	{endif}
+{end}
+
+{trigger:door_haltewunsch}
+	1 (S.L.haltewunsch) (S.L.door_haltewunsch_knopfdruck)
+{end}
+
+{trigger:door_haltewunsch_off}
+	0 (S.L.door_haltewunsch_knopfdruck)
+{end}
+
+{trigger:door_haltewunsch_2}
+	1 (S.L.haltewunsch_2) (S.L.door_haltewunsch_2_knopfdruck)
+{end}
+
+{trigger:door_haltewunsch_2_off}
+	0 (S.L.door_haltewunsch_2_knopfdruck)
+{end}
+
+{trigger:door_aussenoeffner}
+	(L.L.door_freigabe)
+	{if}
+		(C.L.disable_externalbuttons_Haltewunschlampe)
+		{if}
+			1 (S.L.haltewunsch_aussen)
+		{else}
+			1 (S.L.haltewunsch)
+		{endif}
+	{endif}
+{end}
+
+{trigger:door_aussenoeffner_2}
+	(L.L.door_freigabe)
+	{if}
+		(C.L.disable_externalbuttons_Haltewunschlampe)
+		{if}
+			1 (S.L.haltewunsch_2_aussen)
+		{else}
+			1 (S.L.haltewunsch_2)
+		{endif}
+	{endif}
+{end}
+
+{trigger:cp_schalter_kinderwagen}
+	(M.L.cp_schalter_kinderwagen)
+{end}
+
+{trigger:door_kinderwagenwunsch}
+	(L.L.door_freigabe) (L.L.door_handsteuerung) ! &&
+	{if}
+		1 (S.L.door_kinderwagenwunsch)
+	{endif}
+{end}
+
+{trigger:door0_drag}
+	(L.S.mouse_y) (L.S.mouse_x) - 20 / (S.L.doorDragAcc_0)
+{end}
+
+{trigger:door1_drag}
+	(L.S.mouse_y) (L.S.mouse_x) + 20 / (S.L.doorDragAcc_1)
+{end}
+
+{trigger:door2_drag}
+	(L.S.mouse_y) (L.S.mouse_x) - 20 / (S.L.doorDragAcc_2)
+{end}
+
+{trigger:door3_drag}
+	(L.S.mouse_y) (L.S.mouse_x) + 20 / (S.L.doorDragAcc_3)
+{end}
+
+{trigger:door4_drag}
+	(L.S.mouse_y) (L.S.mouse_x) - 20 / (S.L.doorDragAcc_4)
+{end}
+
+{trigger:door5_drag}
+	(L.S.mouse_y) (L.S.mouse_x) + 20 / (S.L.doorDragAcc_5)
+{end}
+
+{trigger:cp_doorEntriegelung_01}
+	(L.L.doorEntriegelung_01) ! (S.L.doorEntriegelung_01)
+	{if}
+		(T.L.ev_doorEntriegelung_01_on)
+	{else}
+		(T.L.ev_doorEntriegelung_01_off)
+		(C.L.door_druckluft)
+		{if}
+			(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+		{endif}
+	{endif}	
+{end}
+
+{trigger:cp_doorEntriegelung_23}
+	(L.L.doorEntriegelung_23) ! (S.L.doorEntriegelung_23)
+	{if}
+		(T.L.ev_doorEntriegelung_23_on)
+	{else}
+		(T.L.ev_doorEntriegelung_23_off)
+		(C.L.door_druckluft)
+		{if}
+			(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+		{endif}
+	{endif}	
+{end}
+
+{trigger:cp_doorEntriegelung_45}
+	(L.L.doorEntriegelung_45) ! (S.L.doorEntriegelung_45)
+	{if}
+		(T.L.ev_doorEntriegelung_45_on)
+	{else}
+		(T.L.ev_doorEntriegelung_45_off)
+		(C.L.door_druckluft)
+		{if}
+			(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+		{endif}
+	{endif}	
+{end}
+
+{macro:Door_Init}
+	301 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_0)
+	302 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_1)
+	303 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_2)
+	304 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_3)
+	305 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_4)
+	306 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_5)
+
+	307 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_0_norm)
+	308 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_1_norm)
+	309 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_2_norm)
+	310 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_3_norm)
+	311 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_4_norm)
+	312 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_5_norm)
+
+'Beim Dämpfer wird der Wert bis auf 40% reduziert statt eine Varianz verwendet:
+	313 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door0_damper) * (S.L.doorDamper_0_kennwert)
+	314 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door1_damper) * (S.L.doorDamper_1_kennwert)
+	315 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door2_damper) * (S.L.doorDamper_2_kennwert)
+	316 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door3_damper) * (S.L.doorDamper_3_kennwert)
+	317 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door4_damper) * (S.L.doorDamper_4_kennwert)
+	318 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door5_damper) * (S.L.doorDamper_5_kennwert)
+
+	(C.L.door_refl) (S.L.doorRefl_0)
+	(C.L.door_refl) (S.L.doorRefl_1)
+	(C.L.door_refl) (S.L.doorRefl_2)
+	(C.L.door_refl) (S.L.doorRefl_3)
+	(C.L.door_refl) (S.L.doorRefl_4)
+	(C.L.door_refl) (S.L.doorRefl_5)
+
+	0 (S.L.door0_warten)
+	0 (S.L.door0_umkehr)	
+
+	0 (S.L.door0_physblock)
+	1 (S.L.door1_physblock)
+
+	0
+	(S.L.door_pressure_open_0)
+	(S.L.door_pressure_close_0)
+	(S.L.door_pressure_open_1)
+	(S.L.door_pressure_close_1)
+	(S.L.door_pressure_open_2)
+	(S.L.door_pressure_close_2)
+	(S.L.door_pressure_open_3)
+	(S.L.door_pressure_close_3)
+	(S.L.door_pressure_open_4)
+	(S.L.door_pressure_close_4)
+	(S.L.door_pressure_open_5)
+	(S.L.door_pressure_close_5)
+
+	(S.L.doorDamper_0) (S.L.doorDamper_1) (S.L.doorDamper_2) (S.L.doorDamper_3) (S.L.doorDamper_4) (S.L.doorDamper_5)
+
+	1 (S.L.doorEntriegelung_doorActive_01)
+	1 (S.L.doorEntriegelung_doorActive_23)
+	1 (S.L.doorEntriegelung_doorActive_45)
+{end}
+
+{macro:Door_Frame}
+		
+'		Reserved for a future release
+		
+		(C.L.door_blocking_d01)
+		{if}
+			(L.L.doorTarget_0)
+			{if}
+				(L.L.doorSpeed_0) (L.L.door_0) (F.L.door_blocking_opn) min (S.L.doorSpeed_0)
+			{else}	
+				(L.L.doorSpeed_0) (L.L.door_0) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_0)
+			{endif}
+			
+			(L.L.doorTarget_1)
+			{if}
+				(L.L.doorSpeed_1) (L.L.door_1) (F.L.door_blocking_opn) min (S.L.doorSpeed_1)
+			{else}	
+				(L.L.doorSpeed_1) (L.L.door_1) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_1)
+			{endif}
+		{endif}
+		
+		(C.L.door_blocking_d23)
+		{if}
+			(L.L.doorTarget_23)
+			{if}
+				(L.L.doorSpeed_2) (L.L.door_2) (F.L.door_blocking_opn) min (S.L.doorSpeed_2)
+				(L.L.doorSpeed_3) (L.L.door_3) (F.L.door_blocking_opn) min (S.L.doorSpeed_3)
+			{else}	
+				(L.L.doorSpeed_2) (L.L.door_2) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_2)
+				(L.L.doorSpeed_3) (L.L.door_3) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_3)
+			{endif}
+		{endif}
+		
+		(C.L.door_blocking_d45)
+		{if}
+			(L.L.doorTarget_45)
+			{if}
+				(L.L.doorSpeed_4) (L.L.door_4) (F.L.door_blocking_opn) min (S.L.doorSpeed_4)
+				(L.L.doorSpeed_5) (L.L.door_5) (F.L.door_blocking_opn) min (S.L.doorSpeed_5)
+			{else}	
+				(L.L.doorSpeed_4) (L.L.door_4) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_4)
+				(L.L.doorSpeed_5) (L.L.door_5) (F.L.door_blocking_cls) -1 * max (S.L.doorSpeed_5)
+			{endif}
+		{endif}
+
+'		Simple Extended API
+
+	(C.L.door_simplesensor)
+	{if}
+		(L.L.door_1) (C.L.door_sensor) <=
+		(L.L.door_3) (C.L.door_sensor) <= &&
+		(L.L.door_4) (C.L.door_sensor) <= &&
+		{if}
+			1 (S.L.door_all_closed)
+		{else}
+			0 (S.L.door_all_closed)
+		{endif}
+	{else}
+		(L.L.door_0) (C.L.door_sensor) <=
+		(L.L.door_1) (C.L.door_sensor) <= &&
+		(L.L.door_2) (C.L.door_sensor) <= &&
+		(L.L.door_3) (C.L.door_sensor) <= &&
+		(L.L.door_4) (C.L.door_sensor) <= &&
+		(L.L.door_5) (C.L.door_sensor) <= &&
+		{if}
+			1 (S.L.door_all_closed)
+		{else}
+			0 (S.L.door_all_closed)
+		{endif}
+	{endif}
+	
+	(L.L.doorTarget_0) 0 =
+	(L.L.doorTarget_1) 0 = &&
+	(L.L.doorTarget_23) 0 = &&
+	(L.L.doorTarget_45) 0 = &&
+	{if}
+		1 (S.L.door_all_closeTarget)
+	{else}
+		0 (S.L.door_all_closeTarget)
+	{endif}
+
+	(L.L.door_2) 0 =
+	(L.L.door_3) 0 = || &&
+	{if}
+		0 (S.L.doorMidLastOpen)
+	{endif}
+	
+	(L.L.door_4) 0 =
+	(L.L.door_5) 0 = || &&
+	{if}
+		0 (S.L.doorAftLastOpen)
+	{endif}
+	
+	(L.L.door_all_closed)
+	{if}
+		(L.L.bremse_halte_timer) (L.S.Timegap) + (C.L.bremse_halte_timer) min (S.L.bremse_halte_timer)
+	{else}
+		0 (S.L.bremse_halte_timer)
+	{endif}
+
+	(C.L.auto_fullwait)
+	(L.L.door_2) 0.9 <
+	(L.L.door_3) 0.9 < || &&
+	{if}
+		0 (S.L.doorMidLastOpen)
+	{endif}
+	
+	(C.L.auto_fullwait)
+	(L.L.door_4) 0.9 <
+	(L.L.door_5) 0.9 < || &&
+	{if}
+		0 (S.L.doorAftLastOpen)
+	{endif}
+	
+	(C.L.auto_door_lock)
+	(L.L.Velocity) (C.L.Door_Bremse_Halte_MaxKMH) > &&
+	(L.L.elec_busbar_main) &&
+	{if}
+		(L.L.door_0) 0.05 <
+		{if}
+			(L.L.door_0_locked) !
+			{if}
+				(T.L.ev_doorlock0_on)
+				1 (S.L.door_0_locked)
+			{endif}
+		{endif}
+		(L.L.door_1) 0.05 <
+		{if}
+			(L.L.door_1_locked) !
+			{if}
+				(T.L.ev_doorlock1_on)
+				1 (S.L.door_1_locked)
+			{endif}
+		{endif}
+		(L.L.door_2) 0.05 <
+		{if}
+			(L.L.door_2_locked) !
+			{if}
+				(T.L.ev_doorlock2_on)
+				1 (S.L.door_2_locked)
+			{endif}
+		{endif}
+		(L.L.door_3) 0.05 <
+		{if}
+			(L.L.door_3_locked) !
+			{if}
+				(T.L.ev_doorlock3_on)
+				1 (S.L.door_3_locked)
+			{endif}
+		{endif}
+		(L.L.door_4) 0.05 <
+		{if}
+			(L.L.door_4_locked) !
+			{if}
+				(T.L.ev_doorlock4_on)
+				1 (S.L.door_4_locked)
+			{endif}
+		{endif}
+		(L.L.door_5) 0.05 <
+		{if}
+			(L.L.door_5_locked) !
+			{if}
+				(T.L.ev_doorlock5_on)
+				1 (S.L.door_5_locked)
+			{endif}
+		{endif}
+	{else}
+		(L.L.door_0_locked)
+		{if}
+			(T.L.ev_doorlock0_off) 
+		{endif}
+		(L.L.door_1_locked)
+		{if}
+			(T.L.ev_doorlock1_off) 
+		{endif}
+		(L.L.door_2_locked)
+		{if}
+			(T.L.ev_doorlock2_off) 
+		{endif}
+		(L.L.door_3_locked)
+		{if}
+			(T.L.ev_doorlock3_off) 
+		{endif}
+		(L.L.door_4_locked)
+		{if}
+			(T.L.ev_doorlock4_off) 
+		{endif}
+		(L.L.door_5_locked)
+		{if}
+			(T.L.ev_doorlock5_off) 
+		{endif}
+		0 (S.L.door_0_locked) (S.L.door_1_locked) (S.L.door_2_locked) (S.L.door_3_locked) (S.L.door_4_locked) (S.L.door_5_locked)
+	{endif}
+		
+	(L.L.haltewunsch)   (L.L.PAX_Exit0_Req) (L.L.PAX_Exit1_Req) || || (S.L.haltewunsch)
+	(L.L.haltewunsch_2) (L.L.PAX_Exit2_Req) (L.L.PAX_Exit3_Req) || || (S.L.haltewunsch_2)
+
+'Bei E-Türen die "active"-Variable der Entriegelung nachführen:
+	(C.L.electric_doors)
+	{if}
+		(L.L.doorEntriegelung_01) (L.L.doorEntriegelung_E_active_01) s0 (L.L.elec_busbar_avail) (C.L.elec_busbar_minV) > ! && || s1
+		l0 = !
+		{if}
+			l1
+			{if}
+				(T.L.ev_doorEntriegelung_01_active_on)
+				0 (S.L.doorEntriegelung_doorActive_01)
+			{else}
+				(T.L.ev_doorEntriegelung_01_active_off)
+			{endif}
+		{endif}
+		l1 (S.L.doorEntriegelung_E_active_01)
+
+		(L.L.doorEntriegelung_23) (L.L.doorEntriegelung_E_active_23) s0 (L.L.elec_busbar_avail) (C.L.elec_busbar_minV) > ! && || s1
+		l0 = !
+		{if}
+			l1
+			{if}
+				(T.L.ev_doorEntriegelung_23_active_on)
+				0 (S.L.doorEntriegelung_doorActive_23)
+			{else}
+				(T.L.ev_doorEntriegelung_23_active_off)
+			{endif}
+		{endif}
+		l1 (S.L.doorEntriegelung_E_active_23)
+
+		(L.L.doorEntriegelung_45) (L.L.doorEntriegelung_E_active_45) s0 (L.L.elec_busbar_avail) (C.L.elec_busbar_minV) > ! && || s1
+		l0 = !
+		{if}
+			l1
+			{if}
+				(T.L.ev_doorEntriegelung_45_active_on)
+				0 (S.L.doorEntriegelung_doorActive_45)
+			{else}
+				(T.L.ev_doorEntriegelung_45_active_off)
+			{endif}
+		{endif}
+		l1 (S.L.doorEntriegelung_E_active_45)
+	{endif}
+	
+
+
+	(M.L.Door0_Calc)
+	(M.L.Door1_Calc)
+	(M.L.DoorAftCalc)
+	(M.L.Door2_Calc)
+	(M.L.Door3_Calc)
+	(M.L.Door4_Calc)
+	(M.L.Door5_Calc)
+	(M.L.enhtrg_bus_doorfront23_cls)
+	(M.L.enhtrg_bus_doorfront45_cls)
+	
+	0
+	(S.L.doorDragAcc_0)
+	(S.L.doorDragAcc_1)
+	(S.L.doorDragAcc_2)
+	(S.L.doorDragAcc_3)
+	(S.L.doorDragAcc_4)
+	(S.L.doorDragAcc_5)
+
+' SET ME!
+
+	(L.L.door_0) 0.9 > (S.L.PAX_Entry0_Open)
+	(L.L.door_1) 0.9 > (S.L.PAX_Entry1_Open)	
+	(L.L.door_2) 0.9 > (L.L.door_3) 0.9 > && (S.L.PAX_Exit0_Open) (S.L.PAX_Exit1_Open) (S.L.PAX_Entry2_Open) (S.L.PAX_Entry3_Open)
+	(L.L.door_4) 0.9 > (L.L.door_5) 0.9 > && (S.L.PAX_Exit2_Open) (S.L.PAX_Exit3_Open) (S.L.PAX_Entry4_Open) (S.L.PAX_Entry5_Open)
+	
+	
+	
+	(L.L.doorSpeed_0) 0 >
+	(L.L.door_pressure_open_0) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundOpen_0)
+	{else}
+		0 (S.L.doorSpeedSoundOpen_0)
+	{endif}
+	
+	(L.L.doorSpeed_0) 0 <
+	(L.L.door_pressure_close_0) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundClose_0)
+	{else}
+		0 (S.L.doorSpeedSoundClose_0)
+	{endif}
+	
+	(L.L.doorSpeed_1) 0 >
+	(L.L.door_pressure_open_1) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundOpen_1)
+	{else}
+		0 (S.L.doorSpeedSoundOpen_1)
+	{endif}
+	
+	(L.L.doorSpeed_1) 0 <
+	(L.L.door_pressure_close_1) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundClose_1)
+	{else}
+		0 (S.L.doorSpeedSoundClose_1)
+	{endif}
+	
+	(L.L.doorSpeed_2) 0 >
+	(L.L.door_pressure_open_2) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundOpen_2)
+	{else}
+		0 (S.L.doorSpeedSoundOpen_2)
+	{endif}
+	
+	(L.L.doorSpeed_2) 0 <
+	(L.L.door_pressure_close_2) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundClose_2)
+	{else}
+		0 (S.L.doorSpeedSoundClose_2)
+	{endif}
+	
+	(L.L.doorSpeed_3) 0 >
+	(L.L.door_pressure_open_3) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundOpen_3)
+	{else}
+		0 (S.L.doorSpeedSoundOpen_3)
+	{endif}
+	
+	(L.L.doorSpeed_3) 0 <
+	(L.L.door_pressure_close_3) 0.3 > &&
+	{if}
+		1 (S.L.doorSpeedSoundClose_3)
+	{else}
+		0 (S.L.doorSpeedSoundClose_3)
+	{endif}
+
+
+'	"Dauerfeuer"-Haltewunsch über Kinderwagenschalter (macht genau dasselbe wie der "trigger:int_haltewunsch"):
+	(L.L.door_haltewunsch_knopfdruck)
+	(L.L.door_handsteuerung) (C.L.piep_enhanced_script) ! && ||
+	{if}
+		1 (S.L.haltewunsch)
+	{endif}
+
+'	Außentürtaster werden von Fahrgästen benutzt:
+
+(C.L.disable_externalbuttons_Haltewunschlampe) !
+{if}
+
+	(L.L.door_freigabe) (L.L.PAX_Entry2_Req) (L.L.PAX_Entry3_Req) || &&
+	{if}
+		1 (S.L.haltewunsch)
+	{endif}
+
+	(L.L.door_freigabe) (L.L.PAX_Entry4_Req) (L.L.PAX_Entry5_Req) || &&
+	{if}
+		1 (S.L.haltewunsch_2)
+	{endif}
+
+{else}
+	(L.L.door_freigabe) (L.L.PAX_Entry2_Req) (L.L.PAX_Entry3_Req) || &&
+	{if}
+		1 (S.L.haltewunsch_aussen)
+	{endif}
+
+	(L.L.door_freigabe) (L.L.PAX_Entry4_Req) (L.L.PAX_Entry5_Req) || &&
+	{if}
+		1 (S.L.haltewunsch_2_aussen)
+	{endif}
+{endif}
+
+'	Setzen der Haltestellenbremse erst bei Stillstand des Busses:
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) (L.L.door_hstbremse_knickschutz) || ||
+	(L.L.bremse_halte) ! (L.L.Velocity) (C.L.Door_Bremse_Halte_MaxKMH) < && &&
+	(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) &&
+	(L.L.bremse_halte) ! (L.L.Velocity) (C.L.Door_Bremse_Halte_MaxKMH) < && && ||
+	(L.L.door_all_closed) ! (C.L.stopbrake_on_dooropen_sensor) && (L.L.bremse_halte) ! && || 
+	{if}
+		(L.L.elec_busbar_main) (C.L.elec_busbar_minV) >
+		{if}
+			(T.L.ev_haltebremse_an)		
+			1 (S.L.bremse_halte)
+		{endif}
+	{endif}
+	
+(L.L.enhtrg_bus_doorfront23_cls) !
+{if}
+	(C.L.piep_on_close)
+	(L.L.doorTarget_23) 0 = &&
+	(L.L.door_3) 0.1 > &&
+	{if}
+		1 (S.L.piep_door23)
+	{else}
+		(C.L.piep_on_open)
+		(L.L.doorTarget_23) 1 = &&
+		(L.L.door_3) 0.9 < &&
+		{if}
+			1 (S.L.piep_door23)
+		{else}
+			0 (S.L.piep_door23)
+		{endif}
+	{endif}
+{endif}
+	
+(L.L.enhtrg_bus_doorfront45_cls) !
+{if}
+	(C.L.piep_on_close)
+	(L.L.doorTarget_45) 0 = &&
+	(L.L.door_4) 0.1 > &&
+	{if}
+		1 (S.L.piep_door45)
+	{else}
+		(C.L.piep_on_open)
+		(L.L.doorTarget_45) 1 = &&
+		(L.L.door_4) 0.9 < &&
+		{if}
+			1 (S.L.piep_door45)
+		{else}
+			0 (S.L.piep_door45)
+		{endif}
+	{endif}
+{endif}
+
+(C.L.piep_enhanced_script)
+{if}
+	(L.L.door_autosteuerung)
+	(L.L.door_autosteuerung_onlyopen) ||
+	{if}
+		(M.L.DoorMid_Open)
+		(C.L.turen3_enabled)
+		{if}
+			(M.L.DoorAft_Open)
+		{endif}
+	{endif}
+{else}
+	(C.L.door_ManBackDoorFrontDoorCombined) !
+	{if}
+		(M.L.DoorMid_Open)
+	{endif}
+
+	(M.L.DoorAft_Open)
+{endif}
+
+'	Türfreigabekriterium
+
+(C.L.piep_enhanced_script)
+{if}
+	(L.L.door_handsteuerung) (S.L.door_freigabe)
+{else}
+	(L.L.bremse_halte_sw) (L.L.bremse_halte) && (S.L.door_freigabe)
+{endif}
+
+'	Haltewunschlampe:
+	(L.L.haltewunsch)
+			(L.L.door_0) 0.2 < (C.L.door_stop_request_killed_by_front_door) ! ||
+			(L.L.door_1) 0.2 < (L.L.door_20h_sw) ! || &&
+			(L.L.door_2) 0.2 < &&
+			(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > && &&
+	{if}
+		1 (S.L.haltewunschlampe)
+	{else}
+		0 (S.L.haltewunschlampe) (S.L.haltewunsch) (S.L.haltewunsch_aussen) (S.L.haltewunsch_2_aussen)
+	{endif}
+
+	(L.L.haltewunsch_2)
+			(L.L.door_0) 0.2 < (C.L.door_stop_request_killed_by_front_door) ! ||
+			(L.L.door_1) 0.2 < (L.L.door_20h_sw) ! || &&
+			(L.L.door_4) 0.2 < &&
+			(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > && &&
+	{if}
+		1 (S.L.haltewunschlampe_2)
+	{else}
+		0 (S.L.haltewunschlampe_2) (S.L.haltewunsch_2)
+	{endif}
+
+	(L.L.haltewunschlampe) (L.L.haltewunschlampe_2) || (S.L.haltewunschlampe_all)
+
+'	Bing:
+
+	(L.L.haltewunsch) (L.L.haltewunsch_2) || (L.L.prev_haltewunsch) ! && (L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	{if}
+		(T.L.ev_stop)
+	{endif}		
+
+	(L.L.haltewunsch) (L.L.haltewunsch_2) || (S.L.prev_haltewunsch)
+
+'	Abfall des Kinderwagenwunsch-Relais bei fehlender Stromversorgung:
+
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) <
+	{if}
+		0 (S.L.door_kinderwagenwunsch)
+	{endif}
+
+'	Beleuchtung der Einstiege
+
+'	Ausgelagert in Lights-Script
+
+
+
+
+'###############################################################################################
+'	Druckluftverhalten:
+
+
+
+(C.L.door_druckluft)
+{if}
+
+		
+		
+
+
+' in s6 ist die verfügbare Druckmenge:
+	(L.L.bremse_p_Tank04) 100000 - 850000 / s6
+
+
+
+'-------------------------------------------------------------------
+
+
+
+' Zunächst die Türentriegelungen:
+
+	(L.L.doorEntriegelung_01)
+	{if}
+'Tür ist entlüftet:
+		-2 (S.L.doorEntriegelung_doorActive_01)
+	{else}
+	(C.L.door_safe_reactivating) !
+	{if}
+'Tür steht unter Druck:
+		1 (S.L.doorEntriegelung_doorActive_01)
+	{else}
+	(L.L.doorEntriegelung_doorActive_01) -2 =
+	{if}
+'Tür ist "vorbereitet":
+		-1 (S.L.doorEntriegelung_doorActive_01)
+	{endif}
+	{endif}
+	{endif}
+
+
+
+	(L.L.doorEntriegelung_23)
+	{if}
+'Tür ist entlüftet:
+		-2 (S.L.doorEntriegelung_doorActive_23)
+	{else}
+	(C.L.door_safe_reactivating) !
+	{if}
+'Tür steht unter Druck:
+		1 (S.L.doorEntriegelung_doorActive_23)
+	{else}
+	(L.L.doorEntriegelung_doorActive_23) -2 =
+	{if}
+'Tür ist "vorbereitet":
+		-1 (S.L.doorEntriegelung_doorActive_23)
+	{endif}
+	{endif}
+	{endif}
+
+
+
+
+	(L.L.doorEntriegelung_45)
+	{if}
+'Tür ist entlüftet:
+		-2 (S.L.doorEntriegelung_doorActive_45)
+	{else}
+	(C.L.door_safe_reactivating) !
+	{if}
+'Tür steht unter Druck:
+		1 (S.L.doorEntriegelung_doorActive_45)
+	{else}
+	(L.L.doorEntriegelung_doorActive_45) -2 =
+	{if}
+'Tür ist "vorbereitet":
+		-1 (S.L.doorEntriegelung_doorActive_45)
+	{endif}
+	{endif}
+	{endif}
+
+'-------------------------------------------------------------------
+
+'Druck laaaaangsam aufbauen (sofern nötig):
+
+	(L.L.doorEntriegelung_doorActive_01) s1 0 >= l1 0.99 < &&
+	{if}
+		1 s0 0.1 s2 s3 (M.L.traegheit) (S.L.doorEntriegelung_doorActive_01)
+		(L.L.doorEntriegelung_doorActive_01) 0.8 >
+		{if}
+			(T.L.ev_doorEntriegelung_01_off_final)
+			1 (S.L.doorEntriegelung_doorActive_01)
+		{endif}
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_23) s1 0 >= l1 0.99 < &&
+	{if}
+		1 s0 0.1 s2 s3 (M.L.traegheit) (S.L.doorEntriegelung_doorActive_23)
+		(L.L.doorEntriegelung_doorActive_23) 0.8 >
+		{if}
+			(T.L.ev_doorEntriegelung_23_off_final)
+			1 (S.L.doorEntriegelung_doorActive_23)
+		{endif}
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_45) s1 0 >= l1 0.99 < &&
+	{if}
+		1 s0 0.1 s2 s3 (M.L.traegheit) (S.L.doorEntriegelung_doorActive_45)
+		(L.L.doorEntriegelung_doorActive_45) 0.8 >
+		{if}
+			(T.L.ev_doorEntriegelung_45_off_final)
+			1 (S.L.doorEntriegelung_doorActive_45)
+		{endif}
+	{endif}
+
+
+'-------------------------------------------------------------------
+
+
+	(L.L.doorEntriegelung_doorActive_01) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_0) ! s5 !
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_01) l6 * * s0
+	(L.L.door_pressure_open_0) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_0)
+
+	(L.L.door_pressure_close_0) s1
+	l5 (L.L.doorEntriegelung_doorActive_01) l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_0)
+
+'.....................
+
+	(L.L.doorEntriegelung_doorActive_01) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_1) ! s5 !
+	{endif}
+
+	l6 (L.L.doorEntriegelung_doorActive_01) * * s0
+	(L.L.door_pressure_open_1) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_1)
+
+	(L.L.door_pressure_close_1) s1
+	l5 (L.L.doorEntriegelung_doorActive_01) l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_1)
+
+'.....................
+
+	(L.L.doorEntriegelung_doorActive_23) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_23) ! s5 !
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_23) l6 * * s0
+	(L.L.door_pressure_open_2) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_2)
+
+	(L.L.door_pressure_close_2) s1
+	(L.L.doorEntriegelung_doorActive_23) l5 l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_2)
+
+'.....................
+
+	(L.L.doorEntriegelung_doorActive_23) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_23) ! s5 !
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_23) l6 * * s0
+	(L.L.door_pressure_open_3) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_3)
+
+	(L.L.door_pressure_close_3) s1
+	(L.L.doorEntriegelung_doorActive_23) l5 l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_3)
+
+'.....................
+
+	(L.L.doorEntriegelung_doorActive_45) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_45) ! s5 !
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_45) l6 * * s0
+	(L.L.door_pressure_open_4) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_4)
+
+	(L.L.door_pressure_close_4) s1
+	(L.L.doorEntriegelung_doorActive_45) l5 l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_4)
+
+'.....................
+
+	(L.L.doorEntriegelung_doorActive_45) 0 <=
+	{if}
+		0 s5
+	{else}
+		(L.L.doorTarget_45) ! s5 !
+	{endif}
+
+	(L.L.doorEntriegelung_doorActive_45) l6 * * s0
+	(L.L.door_pressure_open_5) s1
+	1 s2 1 s3
+	(M.L.traegheit) (S.L.door_pressure_open_5)
+
+	(L.L.door_pressure_close_5) s1
+	(L.L.doorEntriegelung_doorActive_45) l5 l6 * * s0
+	(M.L.traegheit) (S.L.door_pressure_close_5)
+
+'.....................
+
+	l6 (L.L.doorEntriegelung_doorActive_01) 0 max * (S.L.door_pressure_factor_01)
+	l6 (L.L.doorEntriegelung_doorActive_23) 0 max * (S.L.door_pressure_factor_23)
+	l6 (L.L.doorEntriegelung_doorActive_45) 0 max * (S.L.door_pressure_factor_45)
+
+{endif}
+
+'###############################################################################################
+' Dämpferverhalten:
+
+	(L.L.doorSpeed_0) 0 >
+	{if}
+		(L.L.door_0) (F.L.damper_f_open)
+	{else}
+		(L.L.door_0) (F.L.damper_f_close)
+	{endif}
+	(L.L.doorSpeed_0) * s0
+
+	(L.L.doorEntriegelung_01)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_0) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_0)
+
+'........................
+
+	(L.L.doorSpeed_1) 0 >
+	{if}
+		(L.L.door_1) (F.L.damper_f_open)
+	{else}
+		(L.L.door_1) (F.L.damper_f_close)
+	{endif}
+	(L.L.doorSpeed_1) * s0
+
+	(L.L.doorEntriegelung_01)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_1) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_1)
+
+'........................
+
+	(L.L.doorSpeed_2) 0 >
+	{if}
+		(L.L.door_2) (F.L.damper_m_open)
+	{else}
+		(L.L.door_2) (F.L.damper_m_close)
+	{endif}
+	(L.L.doorSpeed_2) * s0
+
+	(L.L.doorEntriegelung_23)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_2) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_2)
+
+'........................
+
+	(L.L.doorSpeed_3) 0 >
+	{if}
+		(L.L.door_3) (F.L.damper_m_open)
+	{else}
+		(L.L.door_3) (F.L.damper_m_close)
+	{endif}
+	(L.L.doorSpeed_3) * s0
+
+	(L.L.doorEntriegelung_23)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_3) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_3)
+
+'........................
+
+	(L.L.doorSpeed_4) 0 >
+	{if}
+		(L.L.door_4) (F.L.damper_b_open)
+	{else}
+		(L.L.door_4) (F.L.damper_b_close)
+	{endif}
+	(L.L.doorSpeed_4) * s0
+
+	(L.L.doorEntriegelung_45)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_4) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_4)
+
+'........................
+
+	(L.L.doorSpeed_5) 0 >
+	{if}
+		(L.L.door_5) (F.L.damper_b_open)
+	{else}
+		(L.L.door_5) (F.L.damper_b_close)
+	{endif}
+	(L.L.doorSpeed_5) * s0
+
+	(L.L.doorEntriegelung_45)
+	{if}
+		l0
+	{else}
+		(L.L.doorDamper_5) s1
+		3 s2 3 s3
+		(M.L.traegheit)
+	{endif}
+	(S.L.doorDamper_5)
+
+
+'###############################################################################################
+'	Gegenseitiges Blockieren der Türflügel:
+
+'	Die jeweilige Tür wird dadurch blockiert, dass ihr Öffnungsgrad kleiner ist als der des anderen Flügels ist, der selbst aber schon fast zu und nicht blockiert sein muss:
+
+	(C.L.door_blocking) 
+	{if}
+
+		(L.L.door0_physblock)
+		{if}
+			(L.L.door_0) (L.L.door_1) (C.L.door_blocking_diff) + < (L.L.door_1) (C.L.door_blocking_area) < && (L.L.door1_physblock) ! && (S.L.door0_physblock)
+		{else}
+			(L.L.door_0) (L.L.door_1) < (L.L.door_1) (C.L.door_blocking_area) < && (L.L.door1_physblock) ! && (S.L.door0_physblock)
+		{endif}
+
+		(L.L.door1_physblock)
+		{if}
+			(L.L.door_1) (L.L.door_0) (C.L.door_blocking_diff) + < (L.L.door_0) (C.L.door_blocking_area) < && (L.L.door0_physblock) ! && (S.L.door1_physblock)
+		{else}
+			(L.L.door_1) (L.L.door_0) < (L.L.door_0) (C.L.door_blocking_area) < && (L.L.door0_physblock) ! && (S.L.door1_physblock)
+		{endif}
+	{else}
+		0 (S.L.door0_physblock) (S.L.door1_physblock)
+	{endif}
+
+
+'###############################################################################################
+'###############################################################################################
+'	AI-Ablauf:
+
+(C.L.piep_enhanced_script)
+{if}
+
+(L.L.AI_Scheduled_AtStation) s0
+1 =
+{if}
+'Wenn Türen geöffnet werden sollen:
+	(L.L.Velocity) (C.L.Door_Bremse_Halte_MaxKMH) <
+	{if}
+'Nur, wenn v < maxkmh, sonst warten
+'Taster jeweils nur betätigen, falls noch nicht an
+		(L.L.bremse_halte_sw) !
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+		
+		(L.L.doorTarget_0) ! (L.L.door_AI_timer) 0.5 > &&
+		(C.L.AI_firstdoor_notused) ! &&
+		{if}
+			(M.L.trg_bus_doorfront0)
+		{endif}
+		(L.L.doorTarget_1) ! (L.L.door_AI_timer) 0.5 > &&
+		(C.L.AI_firstdoor_notused) ! &&
+		{if}
+			(M.L.trg_bus_doorfront1)
+		{endif}
+		
+		(C.L.AI_is_lazy)
+		{if}
+			(L.L.door_handsteuerung) !
+			{if}
+			(M.L.cp_schalter_kinderwagen)
+			{endif}
+		{else}
+			(L.L.doorTarget_23) ! (L.L.door_AI_timer) 1 > &&
+			{if}
+				(M.L.trg_bus_dooraft23)
+			{endif}
+			(C.L.cockpit_tuertaster3_enabled)
+			{if}
+				(L.L.doorTarget_45) ! (L.L.door_AI_timer) 1.5 > &&
+				{if}
+					(M.L.trg_bus_dooraft45)
+				{endif}
+			{endif}
+		{endif}
+
+	{else}
+		0 (S.L.door_AI_timer)
+	{endif}
+	(L.L.door_AI_timer) (L.S.Timegap) + (S.L.door_AI_timer)
+{else}
+l0 -1 =
+{if}
+'Wenn Türen geschlossen werden sollen:
+'Taster jeweils nur betätigen, falls noch nicht aus:
+
+		(L.L.doorTarget_0)
+		{if}
+			(M.L.trg_bus_doorfront0)
+		{endif}
+		(L.L.doorTarget_1)
+		{if}
+			(M.L.trg_bus_doorfront1)
+		{endif}
+		
+		(C.L.AI_is_lazy)
+		{if}
+			(L.L.door_handsteuerung)
+			{if}
+			(M.L.cp_schalter_kinderwagen)
+			{endif}
+			
+			(C.L.closeall_after_auto_off) !
+			{if}
+				(L.L.doorTarget_23) (L.L.door_AI_timer) 0.25 > &&
+				{if}
+					(M.L.trg_bus_dooraft23)
+				{endif}
+				(L.L.doorTarget_45) (L.L.door_AI_timer) 0.5 > &&
+				{if}
+					(M.L.trg_bus_dooraft45)
+				{endif}
+			{endif}
+			
+		{else}
+			(L.L.doorTarget_23) (L.L.door_AI_timer) 0.25 > &&
+			{if}
+				(M.L.trg_bus_dooraft23)
+			{endif}
+			(L.L.doorTarget_45) (L.L.door_AI_timer) 0.5 > &&
+			{if}
+				(M.L.trg_bus_dooraft45)
+			{endif}
+		{endif}
+
+		(L.L.doorTarget_0) !
+		(L.L.doorTarget_1) ! &&
+		(L.L.doorTarget_23) ! &&
+		(L.L.doorTarget_45) ! &&
+		(L.L.door_AI_timer) 1 > &&
+		{if}
+			0 (S.L.door_AI_timer)
+		{endif}
+
+'Haltestellenbremse erst wegnehmen, wenn alle Türen zu. Dann auch erst den Bus AI-mäßig freigeben:
+	(L.L.door_1) 0.1 <
+	(L.L.door_2) 0.1 < &&
+	(L.L.door_4) (C.L.cockpit_tuertaster3_enabled) * 0.1 < &&
+	{if}
+		(L.L.bremse_halte_sw) (L.L.door_AI_timer) 0.3 > &&
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+		(L.L.bremse_halte_sw) !
+		{if}
+			0 (S.L.AI_Scheduled_AtStation)
+		{endif}
+	{else}
+'Sollte eine der Türen auf sein und die Haltestellenbremse aus, dann sofort diese einlegen
+		(L.L.bremse_halte_sw) !
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+		(L.L.doorTarget_0) !
+		(L.L.doorTarget_1) ! &&
+		{if}
+			0 (S.L.door_AI_timer)
+		{endif}
+	{endif}
+	(L.L.door_AI_timer) (L.S.Timegap) + (S.L.door_AI_timer)
+{endif}
+{endif}
+
+
+{else}
+(L.L.AI_Scheduled_AtStation) s0
+1 =
+{if}
+'Wenn Türen geöffnet werden sollen:
+	(L.L.Velocity) (C.L.Door_Bremse_Halte_MaxKMH) <
+	{if}
+'Nur, wenn v < maxkmh, sonst warten
+'Taster jeweils nur betätigen, falls noch nicht an
+		(L.L.bremse_halte_sw) !
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+
+		(C.L.door_ManBackDoorFrontDoorCombined)
+		{if}
+			(L.L.doorTarget_0) ! (L.L.door_AI_timer) 0.3 > &&
+			{if}
+				(M.L.trg_bus_doorfront0)
+			{endif}
+			(L.L.doorTarget_1) ! (L.L.door_AI_timer) 0.3 > &&
+			{if}
+				(M.L.trg_bus_doorfront1)
+			{endif}
+			(L.L.haltewunsch) (L.L.haltewunsch_aussen) ||
+			(L.L.doorTarget_23) ! (L.L.door_AI_timer) 0.6 > && &&
+			{if}
+				(M.L.trg_bus_dooraft23)
+			{endif}
+		{else}
+			(L.L.doorTarget_0) ! (L.L.door_AI_timer) 0.3 > &&
+			{if}
+				(M.L.trg_bus_doorfront0)
+			{endif}
+			(L.L.doorTarget_1) ! (L.L.door_AI_timer) 0.6 > &&
+			{if}
+				(M.L.trg_bus_doorfront1)
+			{endif}
+		{endif}
+
+	{else}
+		0 (S.L.door_AI_timer)
+	{endif}
+	(L.L.door_AI_timer) (L.S.Timegap) + (S.L.door_AI_timer)
+{else}
+l0 -1 =
+{if}
+'Wenn Türen geschlossen werden sollen:
+'Taster jeweils nur betätigen, falls noch nicht aus:
+	(C.L.door_ManBackDoorFrontDoorCombined)
+	{if}
+		(L.L.doorTarget_0)
+		{if}
+			(M.L.trg_bus_doorfront0)
+		{endif}
+		(L.L.doorTarget_1)
+		{if}
+			(M.L.trg_bus_doorfront1)
+			0 (S.L.door_AI_timer)
+		{endif}
+		(L.L.doorTarget_23) (L.L.door_AI_timer) 0.3 > &&
+		{if}
+			(M.L.trg_bus_dooraft23)
+		{endif}
+	{else}
+		(L.L.doorTarget_1)
+		{if}
+			(M.L.trg_bus_doorfront1)
+			0 (S.L.door_AI_timer)
+		{endif}
+		(L.L.doorTarget_0) (L.L.door_AI_timer) 0.3 > &&
+		{if}
+			(M.L.trg_bus_doorfront0)
+		{endif}
+	{endif}
+
+'Haltestellenbremse erst wegnehmen, wenn alle Türen zu. Dann auch erst den Bus AI-mäßig freigeben:
+	(L.L.door_2) 0.1 <
+	(C.L.door_ManBackDoorFrontDoorCombined) ||
+	{if}
+		(L.L.bremse_halte_sw) (L.L.door_AI_timer) 0.3 > &&
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+		(L.L.bremse_halte_sw) !
+		{if}
+			0 (S.L.AI_Scheduled_AtStation)
+		{endif}
+	{else}
+'Sollte eine der Türen auf sein und die Haltestellenbremse aus, dann sofort diese einlegen
+		(L.L.bremse_halte_sw) !
+		{if}
+			(M.L.trg_bus_dooraft)
+		{endif}
+		(L.L.doorTarget_0) !
+		(L.L.doorTarget_1) ! &&
+		{if}
+			0 (S.L.door_AI_timer)
+		{endif}
+	{endif}
+	(L.L.door_AI_timer) (L.S.Timegap) + (S.L.door_AI_timer)
+{endif}
+{endif}
+
+{endif}
+{end}
+
+'###############################################################################################
+' Door Calc Türenpaar 1
+'###############################################################################################
+
+
+{macro:Door0_Calc}
+	(C.L.electric_doors) (L.L.doorEntriegelung_E_active_01) ! && (L.L.door_0_locked) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_01)
+	    {if}
+
+		(L.L.doorTarget_0)
+		{if}
+			(L.L.door_0) (F.L.door_0_opn_speed) (S.L.doorMaxSpeed_0)
+		{else}
+			(L.L.door_0) (F.L.door_0_cls_speed) (S.L.doorMaxSpeed_0)
+		{endif}
+
+		(C.L.fdoor_acc) (S.L.doorAcc_0)
+
+		(L.L.doorTarget_0) ! (L.L.doorSpeed_0) s0 abs 0.05 > (L.L.door_0) 0 > || && 
+		{if}
+			(C.L.thinking_doors)
+			{if}
+				(L.L.doorTarget_1) !
+				(L.L.door_1) 0 > &&
+				(L.L.door_1) (L.L.door_0) - 0.25 /-/ > &&
+				(L.L.door_1) (L.L.door_0) - 0.25 < &&
+				(L.L.door_0) 0.15 > &&
+				{if}
+					(L.L.door0_warten) 1 =
+					{if}
+						0 (S.L.doorSpeed_0)
+						0.20 (S.L.door_0)
+					{else}
+						(L.L.door_0) 0.25 >
+						{if}
+							l0 /-/ (L.L.doorMaxSpeed_0) <
+							{if}
+								(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0)
+							{else}
+								(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0)
+							{endif}
+							(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+						{else}
+							(L.L.door0_umkehr) 1 =
+							{if}
+								0.1 (S.L.doorMaxSpeed_0)
+								(L.L.doorSpeed_0) (L.L.doorMaxSpeed_0) <
+								{if}
+									(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0)
+								{else}
+									(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0)
+								{endif}
+									(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+									(L.L.door_0) 0.20 >
+									{if}
+										1 (S.L.door0_warten)
+									{endif}
+							{else}
+								0.2 (S.L.doorMaxSpeed_0)
+								l0 /-/ (L.L.doorMaxSpeed_0) <
+								{if}
+									(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0)
+								{else}
+									(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0)
+								{endif}
+									(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+									(L.L.door_0) 0.18 <
+									{if}
+										1 (S.L.door0_umkehr)
+									{endif}
+							{endif}
+						{endif}
+					{endif}
+				{else}
+					(L.L.door_0) (F.L.door_0_cls_speed) (S.L.doorMaxSpeed_0)
+					l0 /-/ (L.L.doorMaxSpeed_0) <
+					{if}
+						(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0)
+					{else}
+						(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0)
+					{endif}
+						(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+				{endif}
+	
+			{else}
+				l0 /-/ (L.L.doorMaxSpeed_0) <
+				{if}
+					(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0)
+				{else}
+					(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0)
+				{endif}
+				(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+			{endif}
+		{else}
+			(L.L.doorSpeed_0) abs 0.05 > (L.L.door_0) 1 < || (L.L.doorTarget_0) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_0) <
+				{if}
+					(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * + (S.L.doorSpeed_0) 
+				{else}
+					(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.S.Timegap) * - (S.L.doorSpeed_0) 
+				{endif}
+
+'Falls die Tür durch den anderen Flügel blockiert wird, geht sie nur gaaanz langsam auf:
+				(L.L.door_1) (L.L.door_0) < (L.L.door0_physblock) &&
+				{if}
+					(C.L.door_blocking_speed) (S.L.doorSpeed_0)
+					(T.L.ev_doortriggeropen_0)
+				{endif}
+
+				(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+			{else}
+				0 (S.L.doorSpeed_0)
+			{endif}
+		{endif}
+
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_0) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_0)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_0) ! (L.L.doorSpeed_0) s0 abs 0.05 > (L.L.door_0) 0 > || (L.L.doorDragAcc_0) 0 = ! || && (L.L.door_0_locked) ! &&
+		{if}
+			(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.L.door_pressure_close_0) * (L.L.doorDragAcc_0) - (L.S.Timegap) * - 
+				(L.L.doorDamper_0) (L.L.doorDamper_0_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_0)
+			(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+		{else}
+			(L.L.doorSpeed_0) abs 0.05 > (L.L.door_0) 1 < || (L.L.doorDragAcc_0) 0 = ! || (L.L.doorTarget_0) && (L.L.door_0_locked) ! &&
+			{if}
+				(L.L.doorSpeed_0) (L.L.doorAcc_0) (L.L.door_pressure_open_0) * (L.L.doorDragAcc_0) + (L.S.Timegap) * +
+					(L.L.doorDamper_0) (L.L.doorDamper_0_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_0) 
+
+'Falls die Tür durch den anderen Flügel blockiert wird, geht sie nur gaaanz langsam auf:
+				(L.L.door_1) (L.L.door_0) < (L.L.door0_physblock) &&
+				{if}
+					(C.L.door_blocking_speed) (S.L.doorSpeed_0)
+				{endif}
+
+				(L.L.door_0) (L.L.doorSpeed_0) (L.S.Timegap) * + (S.L.door_0)
+			{else}
+				0 (S.L.doorSpeed_0)
+			{endif}
+		{endif}
+	{endif}
+
+	(L.L.door_0) 1 >
+	{if}
+		(T.L.ev_doorhitopen_0)
+		1 (S.L.door_0)
+		(L.L.doorSpeed_0) /-/ (L.L.doorRefl_0) * (S.L.doorSpeed_0)
+	{else}
+		(L.L.door_0) 0 <
+		{if}
+			(T.L.ev_doorhitclose_0)
+			0 (S.L.door_0)
+			(L.L.doorSpeed_0) /-/ (L.L.doorRefl_0) * (S.L.doorSpeed_0)
+		{endif}
+	{endif}
+{end}
+
+{macro:Door1_Calc}
+'Nur, wenn nicht verriegelt:
+	(C.L.electric_doors) (L.L.door_1_locked) ! && (L.L.doorEntriegelung_E_active_01) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_01)
+	    {if}
+		(L.L.doorTarget_1)
+		{if}
+			(L.L.door_1) (F.L.door_1_opn_speed) (S.L.doorMaxSpeed_1)
+		{else}
+			(L.L.door_1) (F.L.door_1_cls_speed) (S.L.doorMaxSpeed_1)
+		{endif}
+
+		(C.L.fdoor_acc) (S.L.doorAcc_1)
+
+		(L.L.doorTarget_1) ! (L.L.doorSpeed_1) s0 abs 0.05 > (L.L.door_1) 0 > || && 
+		{if}
+			l0 /-/ (L.L.doorMaxSpeed_1) <
+			{if}
+				(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.S.Timegap) * - (S.L.doorSpeed_1)
+			{else}
+				(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.S.Timegap) * + (S.L.doorSpeed_1)
+			{endif}
+			(L.L.door_1) (L.L.doorSpeed_1) (L.S.Timegap) * + (S.L.door_1)
+			(L.L.door_1) 0.01 <
+			{if}
+				0 (S.L.door0_warten)
+				0 (S.L.door0_umkehr)
+			{endif}
+
+		{else}
+			(L.L.doorSpeed_1) abs 0.05 > (L.L.door_1) 1 < || (L.L.doorTarget_1) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_1) <
+				{if}
+					(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.S.Timegap) * + (S.L.doorSpeed_1) 
+				{else}
+					(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.S.Timegap) * - (S.L.doorSpeed_1) 
+				{endif}
+
+'Falls die Tür durch den anderen Flügel blockiert wird, geht sie nur gaaanz langsam auf:
+				(L.L.door_0) (L.L.door_1) < (L.L.door1_physblock) &&
+				{if}
+					(C.L.door_blocking_speed) (S.L.doorSpeed_1)
+					(T.L.ev_doortriggeropen_1)
+				{endif}
+
+				(L.L.door_1) (L.L.doorSpeed_1) (L.S.Timegap) * + (S.L.door_1)
+			{else}
+				0 (S.L.doorSpeed_1)
+			{endif}
+		{endif}
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_1) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_1)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_1) ! (L.L.doorSpeed_1) s0 abs 0.05 > (L.L.door_1) 0 > || (L.L.doorDragAcc_1) 0 = ! || && (L.L.door_1_locked) ! &&
+		{if}
+			(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.L.door_pressure_close_1) (L.L.doorDragAcc_1) - * (L.S.Timegap) * -
+				(L.L.doorDamper_1) (L.L.doorDamper_1_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_1)
+			(L.L.door_1) (L.L.doorSpeed_1) (L.S.Timegap) * + (S.L.door_1)
+		{else}
+			(L.L.doorSpeed_1) abs 0.05 > (L.L.door_1) 1 < || (L.L.doorDragAcc_1) 0 = ! || (L.L.doorTarget_1) && (L.L.door_1_locked) ! &&
+			{if}
+				(L.L.doorSpeed_1) (L.L.doorAcc_1) (L.L.door_pressure_open_1) (L.L.doorDragAcc_1) + * (L.S.Timegap) * +
+					(L.L.doorDamper_1) (L.L.doorDamper_1_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_1) 
+
+'Falls die Tür durch den anderen Flügel blockiert wird, geht sie nur gaaanz langsam auf:
+				(L.L.door_0) (L.L.door_1) < (L.L.door1_physblock) &&
+				{if}
+					(C.L.door_blocking_speed) (S.L.doorSpeed_1)
+				{endif}
+
+				(L.L.door_1) (L.L.doorSpeed_1) (L.S.Timegap) * + (S.L.door_1)
+			{else}
+				0 (S.L.doorSpeed_1)
+			{endif}
+		{endif}
+	{endif}
+	(L.L.door_1) 1 >
+	{if}
+		(T.L.ev_doorhitopen_1)
+		1 (S.L.door_1)
+		(L.L.doorSpeed_1) /-/ (L.L.doorRefl_1) * (S.L.doorSpeed_1)
+	{else}
+		(L.L.door_1) 0 <
+		{if}
+			(T.L.ev_doorhitclose_1)
+			0 (S.L.door_1)
+			(L.L.doorSpeed_1) /-/ (L.L.doorRefl_1) * (S.L.doorSpeed_1)
+		{endif}
+	{endif}
+{end}
+
+'###############################################################################################
+' Hintertürautomatiken
+'###############################################################################################
+
+{macro:cp_schalter_kinderwagen}
+	(L.L.door_handsteuerung) ! (S.L.door_handsteuerung)
+	{if}
+		0 (S.L.door_kinderwagenwunsch)
+		(T.L.ev_kippschalter_ein)
+		(C.L.manual_fotozelle)
+		{if}
+			1 (S.L.door_autosteuerung)
+		{else}
+			1 (S.L.door_autosteuerung_onlyopen)
+		{endif}
+	{else}
+		(T.L.ev_kippschalter_aus)
+		0 (S.L.door_autosteuerung) (S.L.door_autosteuerung_onlyopen)
+		(C.L.closeall_after_auto_off)
+		{if}
+			999 (S.L.doorAftLastOpen) (S.L.doorMidLastOpen)
+			(M.L.DoorMid_Open)
+			(C.L.turen3_enabled) 
+			{if}
+				(M.L.DoorAft_Open)
+			{endif}
+		{endif}
+	{endif}
+{end}
+
+
+{macro:DoorMid_Open}
+	
+	(L.L.haltewunsch) (L.L.haltewunsch_aussen) || (L.L.bremse_halte) &&
+	(L.L.doorEntriegelung_E_active_23) (C.L.electric_doors) && ! &&
+	{if}
+
+		(L.L.doorTarget_23) !
+		(L.L.bremse_halte_sw)
+		(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) && ||
+		(L.L.door_2) 0 >
+		(L.L.door_3) 0 > || || &&
+		{if}
+			(T.L.ev_doortriggeropen_2)
+			1 (S.L.doorTarget_23)
+			(C.L.door_druckluft)
+			{if}
+				(L.L.doorEntriegelung_doorActive_23) -1 =
+				{if}
+					0 (S.L.doorEntriegelung_doorActive_23)
+				{endif}
+				(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+			{endif}
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_23)
+		{endif}
+		0 (S.L.doorMidLastOpen)		
+	{endif}
+{end}
+
+{macro:DoorAft_Open}
+	
+	(L.L.haltewunsch_2) (L.L.haltewunsch_2_aussen) || (L.L.bremse_halte) &&
+	(L.L.doorEntriegelung_E_active_45) (C.L.electric_doors) && ! &&
+	{if}
+		(L.L.doorTarget_45) !
+		(L.L.bremse_halte_sw)
+		(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) && ||
+		(L.L.door_4) 0 >
+		(L.L.door_5) 0 > || || &&
+		{if}
+			(T.L.ev_doortriggeropen_4)
+			1 (S.L.doorTarget_45)
+			(C.L.door_druckluft)
+			{if}
+				(L.L.doorEntriegelung_doorActive_45) -1 =
+				{if}
+					0 (S.L.doorEntriegelung_doorActive_45)
+				{endif}
+				(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+			{endif}
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_45)
+		{endif}
+		0 (S.L.doorAftLastOpen)		
+	{endif}
+{end}
+
+{macro:DoorAftCalc}
+	(C.L.stopbrake_on_auto_on) (L.L.door_handsteuerung) * 0 =
+	(L.L.bremse_halte_sw) ! &&
+	(L.L.door_20h_sw) ! && 
+	(L.L.door_hstbremse_knickschutz) ! &&
+	(L.L.bremse_kneeling) ! && s0
+
+	(C.L.piep_enhanced_script) !
+	{if}
+		(C.L.door_ManBackDoorFrontDoorCombined) !
+		{if}
+			l0
+			(L.L.door_2) 0 = &&
+			(L.L.door_3) 0 = &&
+			s0
+		{endif}
+		
+		l0
+		(L.L.door_4) 0 = &&
+		(L.L.door_5) 0 = &&
+		s0
+		
+	{else}
+		l0
+		(L.L.door_all_closed) &&
+		s0
+	{endif}
+	
+	l0
+	(C.L.stopbrake_off_throttle) (L.L.Throttle) 0.2 >= && (C.L.stopbrake_off_throttle) ! || &&
+	(L.L.bremse_halte_timer) (C.L.bremse_halte_timer) >= &&
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) <= ||
+	(L.L.bremse_halte) &&
+	{if}
+		0 (S.L.bremse_halte) (S.L.doorMidLastOpen)
+		(T.L.ev_haltebremse_aus)
+	{endif}
+
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) >
+	{if}
+		(L.L.bremse_halte) &&
+		{if}
+			(C.L.door_ManBackDoorFrontDoorCombined) !
+			(L.L.door_autosteuerung) ||
+			{if}
+				(L.L.doorMidLastOpen) (L.S.Timegap) + (S.L.doorMidLastOpen)
+			{endif}
+			(C.L.piep_enhanced_script) !
+			(L.L.door_autosteuerung) ||
+			{if}
+				(L.L.doorAftLastOpen) (L.S.Timegap) + (S.L.doorAftLastOpen)
+			{endif}
+		{endif}
+
+		(L.L.doorTarget_23)
+		(L.L.doorMidLastOpen) (C.L.doorMidOpenTime) > &&
+		{if}
+			(C.L.piep_enhanced_script)
+			{if}
+				1 (S.L.enhtrg_bus_doorfront23_cls)
+			{else}
+			
+			(T.L.ev_doortriggerclose_2)
+			0 (S.L.doorTarget_23)
+			(C.L.door_druckluft)
+			{if}
+				(L.L.doorEntriegelung_doorActive_23) -1 =
+				{if}
+					0 (S.L.doorEntriegelung_doorActive_23)
+				{endif}
+				(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+			{endif}
+			{endif}
+		{endif}
+
+		(L.L.doorTarget_45)
+		(L.L.doorAftLastOpen) (C.L.doorAftOpenTime) > &&
+		{if}
+			(C.L.piep_enhanced_script)
+			{if}
+				1 (S.L.enhtrg_bus_doorfront45_cls)
+			{else}
+			
+			(T.L.ev_doortriggerclose_4)
+			0 (S.L.doorTarget_45)
+			(C.L.door_druckluft)
+			{if}
+				(L.L.doorEntriegelung_doorActive_45) -1 =
+				{if}
+					0 (S.L.doorEntriegelung_doorActive_45)
+				{endif}
+				(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+			{endif}
+			{endif}
+		{endif}
+	{endif}
+{end}
+
+'###############################################################################################
+' Door Calc Türenpaar 2
+'###############################################################################################
+
+{macro:Door2_Calc}
+	(C.L.electric_doors) (L.L.doorEntriegelung_E_active_23) ! && (L.L.door_2_locked) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_23)
+	    {if}
+		(L.L.doorTarget_23)
+		{if}
+			(L.L.door_2) (F.L.door_2_opn_speed) (S.L.doorMaxSpeed_2)
+		{else}
+			(L.L.door_2) (F.L.door_2_cls_speed) (S.L.doorMaxSpeed_2)
+		{endif}
+
+		(C.L.bdoor_acc) (S.L.doorAcc_2)
+
+		(L.L.doorTarget_23) ! (L.L.doorSpeed_2) s0 abs 0.05 > (L.L.door_2) 0 > || && 
+		{if}
+			l0 /-/ (L.L.doorMaxSpeed_2) <
+			{if}
+				(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.S.Timegap) * - (S.L.doorSpeed_2)
+			{else}
+				(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.S.Timegap) * + (S.L.doorSpeed_2)
+			{endif}
+			(L.L.door_2) (L.L.doorSpeed_2) (L.S.Timegap) * + (S.L.door_2)
+		{else}
+			(L.L.doorSpeed_2) abs 0.05 > (L.L.door_2) 1 < || (L.L.doorTarget_23) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_2) <
+				{if}
+					(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.S.Timegap) * + (S.L.doorSpeed_2) 
+				{else}
+					(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.S.Timegap) * - (S.L.doorSpeed_2) 
+				{endif}
+				(L.L.door_2) (L.L.doorSpeed_2) (L.S.Timegap) * + (S.L.door_2)
+			{else}
+				0 (S.L.doorSpeed_2)
+			{endif}
+		{endif}
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_2) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_2)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_23) ! (L.L.doorSpeed_2) s0 abs 0.05 > (L.L.door_2) 0 > || (L.L.doorDragAcc_2) 0 = ! || && (L.L.door_2_locked) ! &&
+		{if}
+			(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.L.door_pressure_close_2) (L.L.doorDragAcc_2) - * (L.S.Timegap) * -
+				(L.L.doorDamper_2) (L.L.doorDamper_2_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_2)
+			(L.L.door_2) (L.L.doorSpeed_2) (L.S.Timegap) * + (S.L.door_2)
+		{else}
+			(L.L.doorSpeed_2) abs 0.05 > (L.L.door_2) 1 < || (L.L.doorDragAcc_2) 0 = ! || (L.L.doorTarget_23) && (L.L.door_2_locked) ! &&
+			{if}
+				(L.L.doorSpeed_2) (L.L.doorAcc_2) (L.L.door_pressure_open_2) (L.L.doorDragAcc_2) + * (L.S.Timegap) * +
+					(L.L.doorDamper_2) (L.L.doorDamper_2_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_2) 
+				(L.L.door_2) (L.L.doorSpeed_2) (L.S.Timegap) * + (S.L.door_2)
+			{else}
+				0 (S.L.doorSpeed_2)
+			{endif}
+		{endif}
+	{endif}
+
+	(L.L.door_2) 1 >
+	{if}
+		(T.L.ev_doorhitopen_2)
+		1 (S.L.door_2)
+		(L.L.doorSpeed_2) /-/ (L.L.doorRefl_2) * (S.L.doorSpeed_2)
+	{else}
+		(L.L.door_2) 0 <
+		{if}
+			(T.L.ev_doorhitclose_2)
+			0 (S.L.door_2)
+			(L.L.doorSpeed_2) /-/ (L.L.doorRefl_2) * (S.L.doorSpeed_2)
+		{endif}
+	{endif}
+{end}
+
+{macro:Door3_Calc}
+	(C.L.electric_doors) (L.L.doorEntriegelung_E_active_23) ! && (L.L.door_3_locked) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_23)
+	    {if}
+		(L.L.doorTarget_23)
+		{if}
+			(L.L.door_3) (F.L.door_3_opn_speed) (S.L.doorMaxSpeed_3)
+		{else}
+			(L.L.door_3) (F.L.door_3_cls_speed) (S.L.doorMaxSpeed_3)
+		{endif}
+
+		(C.L.bdoor_acc) (S.L.doorAcc_3)
+
+		(L.L.doorTarget_23) ! (L.L.doorSpeed_3) s0 abs 0.05 > (L.L.door_3) 0 > || && 
+		{if}
+			l0 /-/ (L.L.doorMaxSpeed_3) <
+			{if}
+				(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.S.Timegap) * - (S.L.doorSpeed_3)
+			{else}
+				(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.S.Timegap) * + (S.L.doorSpeed_3)
+			{endif}
+			(L.L.door_3) (L.L.doorSpeed_3) (L.S.Timegap) * + (S.L.door_3)
+		{else}
+			(L.L.doorSpeed_3) abs 0.05 > (L.L.door_3) 1 < || (L.L.doorTarget_23) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_3) <
+				{if}
+					(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.S.Timegap) * + (S.L.doorSpeed_3) 
+				{else}
+					(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.S.Timegap) * - (S.L.doorSpeed_3) 
+				{endif}
+				(L.L.door_3) (L.L.doorSpeed_3) (L.S.Timegap) * + (S.L.door_3)
+			{else}
+				0 (S.L.doorSpeed_3)
+			{endif}
+		{endif}
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_3) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_3)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_23) ! (L.L.doorSpeed_3) s0 abs 0.05 > (L.L.door_3) 0 > || (L.L.doorDragAcc_3) 0 = ! || && (L.L.door_3_locked) ! &&
+		{if}
+			(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.L.door_pressure_close_3) (L.L.doorDragAcc_3) - * (L.S.Timegap) * -
+				(L.L.doorDamper_3) (L.L.doorDamper_3_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_3)
+			(L.L.door_3) (L.L.doorSpeed_3) (L.S.Timegap) * + (S.L.door_3)
+		{else}
+			(L.L.doorSpeed_3) abs 0.05 > (L.L.door_3) 1 < || (L.L.doorDragAcc_3) 0 = ! || (L.L.doorTarget_23) && (L.L.door_3_locked) ! &&
+			{if}
+				(L.L.doorSpeed_3) (L.L.doorAcc_3) (L.L.door_pressure_open_3) (L.L.doorDragAcc_3) + * (L.S.Timegap) * +
+					(L.L.doorDamper_3) (L.L.doorDamper_3_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_3) 
+				(L.L.door_3) (L.L.doorSpeed_3) (L.S.Timegap) * + (S.L.door_3)
+			{else}
+				0 (S.L.doorSpeed_3)
+			{endif}
+		{endif}
+	{endif}
+
+	(L.L.door_3) 1 >
+	{if}
+		(T.L.ev_doorhitopen_3)
+		1 (S.L.door_3)
+		(L.L.doorSpeed_3) /-/ (L.L.doorRefl_3) * (S.L.doorSpeed_3)
+	{else}
+		(L.L.door_3) 0 <
+		{if}
+			(T.L.ev_doorhitclose_3)
+			0 (S.L.door_3)
+			(L.L.doorSpeed_3) /-/ (L.L.doorRefl_3) * (S.L.doorSpeed_3)
+		{endif}
+	{endif}
+
+{end}
+
+'###############################################################################################
+' Door Calc Türenpaar 3
+'###############################################################################################
+
+{macro:Door4_Calc}
+	(C.L.electric_doors) (L.L.doorEntriegelung_E_active_45) ! && (L.L.door_4_locked) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_45)
+	    {if}
+		(L.L.doorTarget_45)
+		{if}
+			(L.L.door_4) (F.L.door_4_opn_speed) (S.L.doorMaxSpeed_4)
+		{else}
+			(L.L.door_4) (F.L.door_4_cls_speed) (S.L.doorMaxSpeed_4)
+		{endif}
+
+		(C.L.bdoor_acc) (S.L.doorAcc_4)
+
+		(L.L.doorTarget_45) ! (L.L.doorSpeed_4) s0 abs 0.05 > (L.L.door_4) 0 > || && 
+		{if}
+			l0 /-/ (L.L.doorMaxSpeed_4) <
+			{if}
+				(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.S.Timegap) * - (S.L.doorSpeed_4)
+			{else}
+				(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.S.Timegap) * + (S.L.doorSpeed_4)
+			{endif}
+			(L.L.door_4) (L.L.doorSpeed_4) (L.S.Timegap) * + (S.L.door_4)
+		{else}
+			(L.L.doorSpeed_4) abs 0.05 > (L.L.door_4) 1 < || (L.L.doorTarget_45) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_4) <
+				{if}
+					(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.S.Timegap) * + (S.L.doorSpeed_4) 
+				{else}
+					(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.S.Timegap) * - (S.L.doorSpeed_4) 
+				{endif}
+				(L.L.door_4) (L.L.doorSpeed_4) (L.S.Timegap) * + (S.L.door_4)
+			{else}
+				0 (S.L.doorSpeed_4)
+			{endif}
+		{endif}
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_4) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_4)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_45) ! (L.L.doorSpeed_4) s0 abs 0.05 > (L.L.door_4) 0 > || (L.L.doorDragAcc_4) 0 = ! || && (L.L.door_4_locked) ! &&
+		{if}
+			(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.L.door_pressure_close_4) (L.L.doorDragAcc_4) - * (L.S.Timegap) * -
+				(L.L.doorDamper_4) (L.L.doorDamper_4_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_4)
+			(L.L.door_4) (L.L.doorSpeed_4) (L.S.Timegap) * + (S.L.door_4)
+		{else}
+			(L.L.doorSpeed_4) abs 0.05 > (L.L.door_4) 1 < || (L.L.doorDragAcc_4) 0 = ! || (L.L.doorTarget_45) && (L.L.door_4_locked) ! &&
+			{if}
+				(L.L.doorSpeed_4) (L.L.doorAcc_4) (L.L.door_pressure_open_4) (L.L.doorDragAcc_4) + * (L.S.Timegap) * +
+					(L.L.doorDamper_4) (L.L.doorDamper_4_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_4) 
+				(L.L.door_4) (L.L.doorSpeed_4) (L.S.Timegap) * + (S.L.door_4)
+			{else}
+				0 (S.L.doorSpeed_4)
+			{endif}
+		{endif}
+	{endif}
+
+	(L.L.door_4) 1 >
+	{if}
+		(T.L.ev_doorhitopen_4)
+		1 (S.L.door_4)
+		(L.L.doorSpeed_4) /-/ (L.L.doorRefl_4) * (S.L.doorSpeed_4)
+	{else}
+		(L.L.door_4) 0 <
+		{if}
+			(T.L.ev_doorhitclose_4)
+			0 (S.L.door_4)
+			(L.L.doorSpeed_4) /-/ (L.L.doorRefl_4) * (S.L.doorSpeed_4)
+		{endif}
+	{endif}
+{end}
+
+{macro:Door5_Calc}
+	(C.L.electric_doors) (L.L.doorEntriegelung_E_active_45) ! && (L.L.door_5_locked) ! &&
+	{if}
+	    (L.L.doorEntriegelung_doorActive_45)
+	    {if}
+		(L.L.doorTarget_45)
+		{if}
+			(L.L.door_5) (F.L.door_5_opn_speed) (S.L.doorMaxSpeed_5)
+		{else}
+			(L.L.door_5) (F.L.door_5_cls_speed) (S.L.doorMaxSpeed_5)
+		{endif}
+
+		(C.L.bdoor_acc) (S.L.doorAcc_5)
+
+		(L.L.doorTarget_45) ! (L.L.doorSpeed_5) s0 abs 0.05 > (L.L.door_5) 0 > || && 
+		{if}
+			l0 /-/ (L.L.doorMaxSpeed_5) <
+			{if}
+				(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.S.Timegap) * - (S.L.doorSpeed_5)
+			{else}
+				(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.S.Timegap) * + (S.L.doorSpeed_5)
+			{endif}
+			(L.L.door_5) (L.L.doorSpeed_5) (L.S.Timegap) * + (S.L.door_5)
+		{else}
+			(L.L.doorSpeed_5) abs 0.05 > (L.L.door_5) 1 < || (L.L.doorTarget_45) &&
+			{if}
+				l0 (L.L.doorMaxSpeed_5) <
+				{if}
+					(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.S.Timegap) * + (S.L.doorSpeed_5) 
+				{else}
+					(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.S.Timegap) * - (S.L.doorSpeed_5) 
+				{endif}
+				(L.L.door_5) (L.L.doorSpeed_5) (L.S.Timegap) * + (S.L.door_5)
+			{else}
+				0 (S.L.doorSpeed_5)
+			{endif}
+		{endif}
+		(L.L.elec_busbar_Rinv_summe)
+			(L.L.doorSpeed_5) abs (C.L.door_Rinv) * +
+		(S.L.elec_busbar_Rinv_summe)
+	    {else}
+		0 (S.L.doorSpeed_5)
+	    {endif}
+'Pneumatisch: .................................
+	{else}
+		(L.L.doorTarget_45) ! (L.L.doorSpeed_5) s0 abs 0.05 > (L.L.door_5) 0 > || (L.L.doorDragAcc_5) 0 = ! || && (L.L.door_5_locked) ! &&
+		{if}
+			(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.L.door_pressure_close_5) (L.L.doorDragAcc_5) - * (L.S.Timegap) * -
+				(L.L.doorDamper_5) (L.L.doorDamper_5_kennwert) (L.S.Timegap) * * -
+				(S.L.doorSpeed_5)
+			(L.L.door_5) (L.L.doorSpeed_5) (L.S.Timegap) * + (S.L.door_5)
+		{else}
+			(L.L.doorSpeed_5) abs 0.05 > (L.L.door_5) 1 < || (L.L.doorDragAcc_5) 0 = ! || (L.L.doorTarget_45) && (L.L.door_5_locked) ! &&
+			{if}
+				(L.L.doorSpeed_5) (L.L.doorAcc_5) (L.L.door_pressure_open_5) (L.L.doorDragAcc_5) + * (L.S.Timegap) * +
+					(L.L.doorDamper_5) (L.L.doorDamper_5_kennwert) (L.S.Timegap) * * -
+					(S.L.doorSpeed_5) 
+				(L.L.door_5) (L.L.doorSpeed_5) (L.S.Timegap) * + (S.L.door_5)
+			{else}
+				0 (S.L.doorSpeed_5)
+			{endif}
+		{endif}
+	{endif}
+
+	(L.L.door_5) 1 >
+	{if}
+		(T.L.ev_doorhitopen_5)
+		1 (S.L.door_5)
+		(L.L.doorSpeed_5) /-/ (L.L.doorRefl_5) * (S.L.doorSpeed_5)
+	{else}
+		(L.L.door_5) 0 <
+		{if}
+			(T.L.ev_doorhitclose_5)
+			0 (S.L.door_5)
+			(L.L.doorSpeed_5) /-/ (L.L.doorRefl_5) * (S.L.doorSpeed_5)
+		{endif}
+	{endif}
+
+{end}
+
+
+'###############################################################################################
+
+
+
+{macro:trg_bus_doorfront0}
+
+	(L.L.doorEntriegelung_E_active_01) (C.L.electric_doors) && !
+	{if}
+		(L.L.doorTarget_0) ! (S.L.doorTarget_0) 
+		{if}
+			(T.L.ev_doortriggeropen_0)
+		{else}
+			(T.L.ev_doortriggerclose_0)
+			
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepclose_0)
+			{endif}
+		{endif}
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_01) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_01)
+			{else}
+				1 (S.L.doorEntriegelung_doorActive_01)
+			{endif}	
+			(L.L.bremse_p_Tank04) 100000 - 0.96 * 100000 + (S.L.bremse_p_Tank04)
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_01)
+		{endif}
+	{endif}
+{end}
+
+{macro:trg_bus_doorfront1}
+
+	(L.L.doorEntriegelung_E_active_01) (C.L.electric_doors) && !
+	{if}
+		(L.L.doorTarget_1) ! (S.L.doorTarget_1) 
+		{if}
+			(T.L.ev_doortriggeropen_1)
+		{else}
+			(T.L.ev_doortriggerclose_1)
+			
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepclose_1)
+			{endif}
+		{endif}	
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_01) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_01)
+			{else}
+				1 (S.L.doorEntriegelung_doorActive_01)
+			{endif}	
+			(L.L.bremse_p_Tank04) 100000 - 0.96 * 100000 + (S.L.bremse_p_Tank04)
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_01)
+		{endif}
+	{endif}
+{end}
+
+{macro:trg_bus_dooraft23}
+(C.L.piep_enhanced_script) (L.L.doorTarget_23) && (C.L.hand_nofullwait_and_piep) (L.L.door_2) 0.9 < && ! &&
+{if}
+	1 (S.L.enhtrg_bus_doorfront23_cls)
+{else}
+	(L.L.doorEntriegelung_E_active_23) (C.L.electric_doors) && !
+	{if}
+		(L.L.doorTarget_23) ! (S.L.doorTarget_23) 
+		{if}
+			(T.L.ev_doortriggeropen_2)
+		{else}
+			(T.L.ev_doortriggerclose_2)
+			
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepclose_23)
+			{endif}
+		{endif}
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_23) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_23)
+			{endif}
+			(L.L.bremse_p_Tank04) 100000 - 0.96 * 100000 + (S.L.bremse_p_Tank04)
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_23)
+		{endif}
+	{endif}
+{endif}
+{end}
+
+{macro:trg_bus_dooraft45}
+(C.L.piep_enhanced_script) (L.L.doorTarget_45) && (C.L.hand_nofullwait_and_piep) (L.L.door_4) 0.9 < && ! &&
+{if}
+	1 (S.L.enhtrg_bus_doorfront45_cls)
+{else}
+	(L.L.doorEntriegelung_E_active_45) (C.L.electric_doors) && !
+	{if}
+		(L.L.doorTarget_45) ! (S.L.doorTarget_45) 
+		{if}
+			(T.L.ev_doortriggeropen_4)
+		{else}
+			(T.L.ev_doortriggerclose_4)
+			
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepclose_45)
+			{endif}
+		{endif}
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_45) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_45)
+			{endif}
+			(L.L.bremse_p_Tank04) 100000 - 0.96 * 100000 + (S.L.bremse_p_Tank04)
+		{else}
+			1 (S.L.doorEntriegelung_doorActive_45)
+		{endif}
+	{endif}
+{endif}
+{end}
+
+{macro:enhtrg_bus_doorfront23_cls}
+(L.L.enhtrg_bus_doorfront23_cls)
+{if}
+
+	(L.L.doorTarget_23)
+	{if}
+		1 (S.L.piep_door23)
+		(L.L.piep_time_door23) (L.S.Timegap) + (S.L.piep_time_door23)
+	{else}
+		0 (S.L.piep_door23) (S.L.enhtrg_bus_doorfront23_cls)
+	{endif}
+	
+	(L.L.doorTarget_23)
+	(L.L.piep_time_door23) (C.L.pieptime) > &&
+	{if}
+		(T.L.ev_doortriggerclose_2)
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_23) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_23)
+			{endif}
+			(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+		{endif}
+		0 (S.L.piep_time_door23) (S.L.doorTarget_23) (S.L.enhtrg_bus_doorfront23_cls) (S.L.piep_door23)
+	{endif}
+{endif}
+{end}
+
+{macro:enhtrg_bus_doorfront45_cls}
+(L.L.enhtrg_bus_doorfront45_cls)
+{if}
+
+	(L.L.doorTarget_45)
+	{if}
+		1 (S.L.piep_door45)
+		(L.L.piep_time_door45) (L.S.Timegap) + (S.L.piep_time_door45)
+	{else}
+		0 (S.L.piep_door45) (S.L.enhtrg_bus_doorfront45_cls)
+	{endif}
+	
+	(L.L.doorTarget_45)
+	(L.L.piep_time_door45) (C.L.pieptime) > &&
+	{if}
+		(T.L.ev_doortriggerclose_4)
+		(C.L.door_druckluft)
+		{if}
+			(L.L.doorEntriegelung_doorActive_45) -1 =
+			{if}
+				0 (S.L.doorEntriegelung_doorActive_45)
+			{endif}
+			(L.L.bremse_p_Tank04) 100000 - 0.94 * 100000 + (S.L.bremse_p_Tank04)
+		{endif}
+		0 (S.L.piep_time_door45) (S.L.doorTarget_45) (S.L.enhtrg_bus_doorfront45_cls) (S.L.piep_door45)
+	{endif}
+{endif}
+{end}
+
+
+
+{macro:trg_bus_dooraft}
+	(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)
+	
+	(L.L.bremse_halte_sw)
+	{if}
+		(T.L.ev_haltebremse_sw_an)
+	{else}
+		(T.L.ev_haltebremse_sw_aus)
+	{endif}	
+{end}
+
+{macro:trg_bus_20h-switch}
+	(L.L.door_20h_sw) ! (S.L.door_20h_sw)
+	
+	(L.L.door_20h_sw)
+	{if}
+		(T.L.ev_haltebremse_sw_an)
+	{else}
+		(T.L.ev_haltebremse_sw_aus)
+	{endif}	
+{end}
+
+
+{macro:traegheit}
+
+'Simuliert träges Verhalten (exponentiell)
+
+'Ladekonventionen:
+'	Sollwert		l0
+'	Istwert			l1
+'	Konstante Anlauf	l2 (Einheiten/s)
+'	Konstante Ablauf	l3 (Einheiten/s)
+
+'Anlauf oder Auslauf?
+	l0 l1 > 
+	{if}
+		l2 (L.S.Timegap) * 1 min -1 max s4
+	{else}
+		l3 (L.S.Timegap) * 1 min -1 max s4
+	{endif}
+
+
+'Sollwert:
+	l0
+'Istwert:
+	l1
+'Beschleunigung:
+	- l4 *
+'Addition zum Istwert:
+	l1 + s1
+{end}
