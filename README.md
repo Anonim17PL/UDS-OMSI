@@ -1,4 +1,4 @@
-# UDS-delphi-OMSI
+# UDS-OMSI
 Universal Door Script for OMSI 2<br>
 Extension of the standard script MAN NL202<br>
 <br>
