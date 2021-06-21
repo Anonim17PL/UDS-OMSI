@@ -279,6 +279,13 @@
 	{endif}	
 {end}
 
+{trigger:cp_doorEntriegelung_allback}
+		0 (S.L.doorEntriegelung_01) (S.L.doorEntriegelung_23) (S.L.doorEntriegelung_45)
+		(T.L.ev_doorEntriegelung_01_off)
+		(T.L.ev_doorEntriegelung_23_off)
+		(T.L.ev_doorEntriegelung_45_off)
+{end}
+
 {macro:Door_Init}
 	301 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_0)
 	302 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_1)
@@ -1072,9 +1079,9 @@
 
 	(L.L.doorSpeed_0) 0 >
 	{if}
-		(L.L.door_0) (F.L.damper_f_open)
+		(L.L.doorSpeed_0) (F.L.damper_f_open)
 	{else}
-		(L.L.door_0) (F.L.damper_f_close)
+		(L.L.doorSpeed_0) (F.L.damper_f_close)
 	{endif}
 	(L.L.doorSpeed_0) * s0
 
@@ -1092,9 +1099,9 @@
 
 	(L.L.doorSpeed_1) 0 >
 	{if}
-		(L.L.door_1) (F.L.damper_f_open)
+		(L.L.doorSpeed_1) (F.L.damper_f_open)
 	{else}
-		(L.L.door_1) (F.L.damper_f_close)
+		(L.L.doorSpeed_1) (F.L.damper_f_close)
 	{endif}
 	(L.L.doorSpeed_1) * s0
 
@@ -1112,9 +1119,9 @@
 
 	(L.L.doorSpeed_2) 0 >
 	{if}
-		(L.L.door_2) (F.L.damper_m_open)
+		(L.L.doorSpeed_2) (F.L.damper_m_open)
 	{else}
-		(L.L.door_2) (F.L.damper_m_close)
+		(L.L.doorSpeed_2) (F.L.damper_m_close)
 	{endif}
 	(L.L.doorSpeed_2) * s0
 
@@ -1132,9 +1139,9 @@
 
 	(L.L.doorSpeed_3) 0 >
 	{if}
-		(L.L.door_3) (F.L.damper_m_open)
+		(L.L.doorSpeed_3) (F.L.damper_m_open)
 	{else}
-		(L.L.door_3) (F.L.damper_m_close)
+		(L.L.doorSpeed_3) (F.L.damper_m_close)
 	{endif}
 	(L.L.doorSpeed_3) * s0
 
@@ -1152,9 +1159,9 @@
 
 	(L.L.doorSpeed_4) 0 >
 	{if}
-		(L.L.door_4) (F.L.damper_b_open)
+		(L.L.doorSpeed_4) (F.L.damper_b_open)
 	{else}
-		(L.L.door_4) (F.L.damper_b_close)
+		(L.L.doorSpeed_4) (F.L.damper_b_close)
 	{endif}
 	(L.L.doorSpeed_4) * s0
 
@@ -1172,9 +1179,9 @@
 
 	(L.L.doorSpeed_5) 0 >
 	{if}
-		(L.L.door_5) (F.L.damper_b_open)
+		(L.L.doorSpeed_5) (F.L.damper_b_open)
 	{else}
-		(L.L.door_5) (F.L.damper_b_close)
+		(L.L.doorSpeed_5) (F.L.damper_b_close)
 	{endif}
 	(L.L.doorSpeed_5) * s0
 
@@ -2252,6 +2259,10 @@ l0 -1 =
 		(L.L.doorTarget_0) ! (S.L.doorTarget_0) 
 		{if}
 			(T.L.ev_doortriggeropen_0)
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepopen_0)
+			{endif}
 		{else}
 			(T.L.ev_doortriggerclose_0)
 			
@@ -2282,6 +2293,10 @@ l0 -1 =
 		(L.L.doorTarget_1) ! (S.L.doorTarget_1) 
 		{if}
 			(T.L.ev_doortriggeropen_1)
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepopen_1)
+			{endif}
 		{else}
 			(T.L.ev_doortriggerclose_1)
 			
@@ -2309,12 +2324,20 @@ l0 -1 =
 (C.L.piep_enhanced_script) (L.L.doorTarget_23) && (C.L.hand_nofullwait_and_piep) (L.L.door_2) 0.9 < && ! &&
 {if}
 	1 (S.L.enhtrg_bus_doorfront23_cls)
+	(C.L.piep_dedicated)
+	{if}
+		(T.L.ev_doorpiepclose_23)
+	{endif}
 {else}
 	(L.L.doorEntriegelung_E_active_23) (C.L.electric_doors) && !
 	{if}
 		(L.L.doorTarget_23) ! (S.L.doorTarget_23) 
 		{if}
 			(T.L.ev_doortriggeropen_2)
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepopen_23)
+			{endif}
 		{else}
 			(T.L.ev_doortriggerclose_2)
 			
@@ -2341,12 +2364,20 @@ l0 -1 =
 (C.L.piep_enhanced_script) (L.L.doorTarget_45) && (C.L.hand_nofullwait_and_piep) (L.L.door_4) 0.9 < && ! &&
 {if}
 	1 (S.L.enhtrg_bus_doorfront45_cls)
+	(C.L.piep_dedicated)
+	{if}
+		(T.L.ev_doorpiepclose_23)
+	{endif}
 {else}
 	(L.L.doorEntriegelung_E_active_45) (C.L.electric_doors) && !
 	{if}
 		(L.L.doorTarget_45) ! (S.L.doorTarget_45) 
 		{if}
 			(T.L.ev_doortriggeropen_4)
+			(C.L.piep_dedicated)
+			{if}
+				(T.L.ev_doorpiepopen_45)
+			{endif}
 		{else}
 			(T.L.ev_doortriggerclose_4)
 			

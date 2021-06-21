@@ -16,7 +16,7 @@ bdoor_acc
 
 [const]
 door_acc_var
--1
+0
 
 	Front/Back Door Max Speed (100%/s)
 
@@ -34,33 +34,33 @@ bdoor_maxspeed
 
 [const]
 door_maxspeed_var
-1
+0
 
 	Front/Back Door Damper (100%/s)
 
 [const]
 door0_damper
-12
+2
 
 [const]
 door1_damper
-12
+2
 
 [const]
 door2_damper
-12
+2
 
 [const]
 door3_damper
-12
+2
 
 [const]
 door4_damper
-12
+2
 
 [const]
 door5_damper
-12
+2
 
 
 		Dämpferkennlinie über Öffnungzustand:
@@ -167,7 +167,7 @@ Door alarm time before closing
 
 [const]
 pieptime
-2
+1.416
 
 Przycisk 3 drzwi aktywny
 The 3-door button is active
@@ -281,6 +281,7 @@ auto_door_lock
 1
 
 KONIEC SKRYPTU ROZSZERZONEGO
+END EXTENDED SCRIPT
 
 
 	Busstop Brake will only be activated belov MaxKMH:
