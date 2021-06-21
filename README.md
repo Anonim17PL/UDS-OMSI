@@ -15,6 +15,6 @@ API:<br>
  <br>
  Where X is the door number from 0 to 5<br>
  There are 3 pairs of doors (0-5)<br>
- 
- <a href="..\..\releases\">DOWNLOAD</a>
+ <a href="../../archive/refs/heads/main.zip">DOWNLOAD LATEST</a>
+ <a href="../../releases/">DOWNLOAD STABLE</a>
 
