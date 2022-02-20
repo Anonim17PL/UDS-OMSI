@@ -146,3 +146,23 @@ door_all_closed
 door_all_closeTarget
 
 bremse_halte_timer
+
+Door0_I
+Door1_I
+
+Door2_I
+Door3_I
+
+Door4_I
+Door5_I
+
+Door0_P
+Door1_P
+
+Door2_P
+Door3_P
+
+Door4_P
+Door5_P
+
+DOOR_SCRIPT_REINIT

@@ -7,6 +7,7 @@
 '(c) 2007-2009 Rüdiger Hülsmann
 '(c) 2007-2012 Marcel Kuhnt
 '(c) 2011 Markus Rabe
+'(c) 2021-2022 Anonim17PL
 
 'Script Version: 1.1
 'Omsi release: 1.0
@@ -62,6 +63,7 @@
 '- Rüdiger Hülsmann	28.10.2013	"needs stopbrake" function debugged
 '- Rüdiger Hülsmann	29.10.2013	Keine Freigabe der Haltestellenbremse bei aktiviertem Kneeling
 '- Anonim17PL		2020-2021	Create Enhanced script.
+'= Anonim17PL		20.02.2022	Volvo-specific features added. End of script support with no enhanced features enabled.
 
 '--------------------------------------------------------------------------------
 'Zu den Variablen doorEntriegelung_doorActive_01 und  doorEntriegelung_doorActive_23:
@@ -70,6 +72,42 @@
 '1, wenn die Tür normal aktiv ist. Bei Drucklufttüren ist sie wiederum 1 im Normalzustand, von 0 bis 1 baut sich
 'ggf. der Druck nach erstmaligem Betätigen auf, bei -1 wartet sie auf erstmalige Betätigung und bei -2 ist sie
 'drucklos
+
+{trigger:bus_doorfront0_BVG}
+	
+	(C.L.door_ManFrontDoor)
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) || (C.L.door_needs_stopbrakeswitch) && (C.L.door_needs_stopbrake) ! && &&
+	(L.L.bremse_halte) (C.L.door_needs_stopbrake) && ||
+	(C.L.door_needs_stopbrake) (C.L.door_needs_stopbrakeswitch) || ! ||
+	(L.L.door_0_locked) ! &&
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	{if}
+		(M.L.trg_bus_doorfront0)
+	{endif}
+	1 (S.L.cockpit_tuertaster1)
+{end}
+
+{trigger:bus_doorfront0_BVG_off}
+	0 (S.L.cockpit_tuertaster1)
+{end}
+
+{trigger:bus_doorfront1_BVG}
+	
+	(C.L.door_ManFrontDoor)
+	(L.L.bremse_halte_sw) (L.L.door_20h_sw) || (C.L.door_needs_stopbrakeswitch) && (C.L.door_needs_stopbrake) ! && &&
+	(L.L.bremse_halte) (C.L.door_needs_stopbrake) && ||
+	(C.L.door_needs_stopbrake) (C.L.door_needs_stopbrakeswitch) || ! ||
+	(L.L.door_1_locked) ! &&
+	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) > &&
+	{if}
+		(M.L.trg_bus_doorfront1)
+	{endif}
+	1 (S.L.cockpit_tuertaster2)
+{end}
+
+{trigger:bus_doorfront1_BVG_off}
+	0 (S.L.cockpit_tuertaster2)
+{end}
 
 {trigger:bus_doorfront0}
 	
@@ -93,7 +131,7 @@
 {end}
 
 {trigger:bus_doorfront0_external}
-	(L.L.elec_busbar_avail) (C.L.elec_busbar_minV) >
+	(L.L.elec_V_battery) (C.L.elec_busbar_minV) >
 	{if}
 		(M.L.trg_bus_doorfront0)
 		(C.L.door_ManBackDoorFrontDoorCombined)
@@ -287,27 +325,27 @@
 {end}
 
 {macro:Door_Init}
-	301 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_0)
-	302 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_1)
-	303 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_2)
-	304 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_3)
-	305 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_4)
-	306 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_5)
+	311 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_0)
+	312 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.fdoor_acc) + (S.L.doorAcc_1)
+	333 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_2)
+	334 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.mdoor_acc) + (S.L.doorAcc_3)
+	355 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_4)
+	356 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_acc_var) * (C.L.bdoor_acc) + (S.L.doorAcc_5)
 
-	307 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_0_norm)
-	308 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_1_norm)
-	309 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_2_norm)
-	310 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_3_norm)
-	311 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_4_norm)
-	312 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_5_norm)
+	367 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_0_norm)
+	368 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.fdoor_maxspeed) + (S.L.doorMaxSpeed_1_norm)
+	349 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_2_norm)
+	340 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.mdoor_maxspeed) + (S.L.doorMaxSpeed_3_norm)
+	331 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_4_norm)
+	332 (M.V.NrSpecRandom) 2 * 1 - (C.L.door_maxspeed_var) * (C.L.bdoor_maxspeed) + (S.L.doorMaxSpeed_5_norm)
 
 'Beim Dämpfer wird der Wert bis auf 40% reduziert statt eine Varianz verwendet:
-	313 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door0_damper) * (S.L.doorDamper_0_kennwert)
-	314 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door1_damper) * (S.L.doorDamper_1_kennwert)
-	315 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door2_damper) * (S.L.doorDamper_2_kennwert)
-	316 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door3_damper) * (S.L.doorDamper_3_kennwert)
-	317 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door4_damper) * (S.L.doorDamper_4_kennwert)
-	318 (M.V.NrSpecRandom) 0.9 * 0.1 + (C.L.door5_damper) * (S.L.doorDamper_5_kennwert)
+	323 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door0_damper) * (S.L.doorDamper_0_kennwert)
+	314 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door1_damper) * (S.L.doorDamper_1_kennwert)
+	335 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door2_damper) * (S.L.doorDamper_2_kennwert)
+	336 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door3_damper) * (S.L.doorDamper_3_kennwert)
+	357 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door4_damper) * (S.L.doorDamper_4_kennwert)
+	328 (M.V.NrSpecRandom) 1 * 0.1 + (C.L.door5_damper) * (S.L.doorDamper_5_kennwert)
 
 	(C.L.door_refl) (S.L.doorRefl_0)
 	(C.L.door_refl) (S.L.doorRefl_1)
@@ -613,7 +651,7 @@
 	
 	
 	(L.L.doorSpeed_0) 0 >
-	(L.L.door_pressure_open_0) 0.3 > &&
+	(L.L.door_pressure_open_0) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundOpen_0)
 	{else}
@@ -621,7 +659,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_0) 0 <
-	(L.L.door_pressure_close_0) 0.3 > &&
+	(L.L.door_pressure_close_0) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundClose_0)
 	{else}
@@ -629,7 +667,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_1) 0 >
-	(L.L.door_pressure_open_1) 0.3 > &&
+	(L.L.door_pressure_open_1) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundOpen_1)
 	{else}
@@ -637,7 +675,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_1) 0 <
-	(L.L.door_pressure_close_1) 0.3 > &&
+	(L.L.door_pressure_close_1) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundClose_1)
 	{else}
@@ -645,7 +683,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_2) 0 >
-	(L.L.door_pressure_open_2) 0.3 > &&
+	(L.L.door_pressure_open_2) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundOpen_2)
 	{else}
@@ -653,7 +691,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_2) 0 <
-	(L.L.door_pressure_close_2) 0.3 > &&
+	(L.L.door_pressure_close_2) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundClose_2)
 	{else}
@@ -661,7 +699,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_3) 0 >
-	(L.L.door_pressure_open_3) 0.3 > &&
+	(L.L.door_pressure_open_3) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundOpen_3)
 	{else}
@@ -669,7 +707,7 @@
 	{endif}
 	
 	(L.L.doorSpeed_3) 0 <
-	(L.L.door_pressure_close_3) 0.3 > &&
+	(L.L.door_pressure_close_3) 0.1 > &&
 	{if}
 		1 (S.L.doorSpeedSoundClose_3)
 	{else}
@@ -730,12 +768,14 @@
 	(C.L.piep_on_close)
 	(L.L.doorTarget_23) 0 = &&
 	(L.L.door_3) 0.1 > &&
+	(L.L.elec_busbar_main) &&
 	{if}
 		1 (S.L.piep_door23)
 	{else}
 		(C.L.piep_on_open)
 		(L.L.doorTarget_23) 1 = &&
 		(L.L.door_3) 0.9 < &&
+		(L.L.elec_busbar_main) &&
 		{if}
 			1 (S.L.piep_door23)
 		{else}
@@ -749,12 +789,14 @@
 	(C.L.piep_on_close)
 	(L.L.doorTarget_45) 0 = &&
 	(L.L.door_4) 0.1 > &&
+	(L.L.elec_busbar_main) &&
 	{if}
 		1 (S.L.piep_door45)
 	{else}
 		(C.L.piep_on_open)
 		(L.L.doorTarget_45) 1 = &&
 		(L.L.door_4) 0.9 < &&
+		(L.L.elec_busbar_main) &&
 		{if}
 			1 (S.L.piep_door45)
 		{else}
@@ -1853,6 +1895,7 @@ l0 -1 =
 	
 	l0
 	(C.L.stopbrake_off_throttle) (L.L.Throttle) 0.2 >= && (C.L.stopbrake_off_throttle) ! || &&
+	(C.L.volvo_stopbrake_mode) (L.L.lights_sw_blinker) 1 = && (C.L.volvo_stopbrake_mode) ! || &&
 	(L.L.bremse_halte_timer) (C.L.bremse_halte_timer) >= &&
 	(L.L.elec_busbar_main) (C.L.elec_busbar_minV) <= ||
 	(L.L.bremse_halte) &&
@@ -2405,6 +2448,7 @@ l0 -1 =
 {if}
 
 	(L.L.doorTarget_23)
+	(L.L.elec_busbar_main) &&
 	{if}
 		1 (S.L.piep_door23)
 		(L.L.piep_time_door23) (L.S.Timegap) + (S.L.piep_time_door23)
@@ -2434,6 +2478,7 @@ l0 -1 =
 {if}
 
 	(L.L.doorTarget_45)
+	(L.L.elec_busbar_main) &&
 	{if}
 		1 (S.L.piep_door45)
 		(L.L.piep_time_door45) (L.S.Timegap) + (S.L.piep_time_door45)
